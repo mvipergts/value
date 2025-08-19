@@ -1,0 +1,10 @@
+# dependencies
+node_modules/
+# local env
+.env
+# uploads & generated reports
+uploads/
+reports/
+# OS
+.DS_Store
+Thumbs.db
