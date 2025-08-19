@@ -34,11 +34,13 @@ function readAppraisals() { return JSON.parse(fs.readFileSync(dataFile, 'utf-8')
 function writeAppraisals(list) { fs.writeFileSync(dataFile, JSON.stringify(list, null, 2)); }
 
 // --- API STUBS ---
-// You can later replace these with real API calls via your Express proxy
 app.get('/api/value/:vin', async (req, res) => {
   const { vin } = req.params;
-  // Placeholder value logic
-  res.json({ vin, estimate: 12500, currency: 'USD', source: 'stub' });
+  // Placeholder logic; replace with real provider later
+  const estimate = 12500;
+  const wholesale = Math.round(estimate * 0.90);
+  const retail = Math.round(estimate * 1.15);
+  res.json({ vin, estimate, wholesale, retail, currency: 'USD', source: 'stub' });
 });
 
 app.get('/api/history/:vin', async (req, res) => {
@@ -81,7 +83,7 @@ const reportsDir = path.join(__dirname, 'reports');
 if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
 
 app.post('/api/report', (req, res) => {
-  const { vin, vehicle, valuation, history, maintenance, notes, reconItems, carfaxUrl, dealer } = req.body;
+  const { vin, vehicle, valuation, history, maintenance, notes, reconItems, carfaxUrl, dealer, hiddenMaintenanceCost, additionalCosts } = req.body;
   const filePath = path.join(reportsDir, `${vin || 'report'}_${Date.now()}.pdf`);
   const doc = new PDFDocument({ margin: 40 });
   const stream = fs.createWriteStream(filePath);
@@ -97,28 +99,57 @@ app.post('/api/report', (req, res) => {
   doc.moveDown().fontSize(14).text(`VIN: ${vin || 'N/A'}`);
   if (vehicle) doc.text(`Vehicle: ${vehicle}`);
 
+  // Valuation
   doc.moveDown().fontSize(12).text('Valuation', { underline: true });
-  doc.fontSize(10).text(typeof valuation === 'string' ? valuation : JSON.stringify(valuation, null, 2));
+  if (valuation && typeof valuation === 'object' && ('wholesale' in valuation || 'retail' in valuation)) {
+    if (valuation.wholesale !== undefined) doc.fontSize(11).text(`Wholesale: $${Number(valuation.wholesale).toLocaleString()}`);
+    if (valuation.retail !== undefined) doc.fontSize(11).text(`Retail: $${Number(valuation.retail).toLocaleString()}`);
+    doc.fontSize(10).text('Details:');
+    doc.fontSize(9).text(JSON.stringify(valuation, null, 2));
+  } else {
+    doc.fontSize(10).text(typeof valuation === 'string' ? valuation : JSON.stringify(valuation, null, 2));
+  }
 
+  // History
   doc.moveDown().fontSize(12).text('History', { underline: true });
   doc.fontSize(10).text(typeof history === 'string' ? history : JSON.stringify(history, null, 2));
 
+  // Maintenance
   doc.moveDown().fontSize(12).text('Maintenance', { underline: true });
   doc.fontSize(10).text(typeof maintenance === 'string' ? maintenance : JSON.stringify(maintenance, null, 2));
 
+  // Notes
   if (notes) {
     doc.moveDown().fontSize(12).text('Notes', { underline: true });
     doc.fontSize(10).text(notes);
   }
 
+  // Recon
   if (reconItems) {
     doc.moveDown().fontSize(12).text('Reconditioning Items', { underline: true });
     doc.fontSize(10).text(Array.isArray(reconItems) ? reconItems.join('\n') : String(reconItems));
   }
 
+  // Carfax link
   if (carfaxUrl) {
     doc.moveDown().fontSize(10).fillColor('blue').text(`Carfax: ${carfaxUrl}`, { link: carfaxUrl, underline: true });
     doc.fillColor('black');
+  }
+
+  // Costs Summary
+  const addl = Array.isArray(additionalCosts) ? additionalCosts : [];
+  const addlTotal = addl.reduce((s,it)=> s + Number(it.amount||0), 0);
+  const hidden = Number(hiddenMaintenanceCost || 0);
+  const grand = addlTotal + hidden;
+
+  doc.moveDown().fontSize(12).text('Costs Summary', { underline: true });
+  if (addl.length === 0 && !hidden) {
+    doc.fontSize(10).text('No additional costs recorded.');
+  } else {
+    addl.forEach(it => doc.fontSize(10).text(`${it.label}: $${Number(it.amount||0).toLocaleString()}`));
+    doc.moveDown(0.2).fontSize(10).text(`Hidden maintenance: $${hidden.toLocaleString()}`);
+    doc.moveDown(0.3).fontSize(11).text(`Total additional costs: $${addlTotal.toLocaleString()}`);
+    doc.fontSize(11).text(`Grand total (additional + hidden): $${grand.toLocaleString()}`);
   }
 
   doc.end();
@@ -127,7 +158,7 @@ app.post('/api/report', (req, res) => {
   });
 });
 
-// Fallback
+// Health check
 app.get('/healthz', (_, res) => res.json({ ok: true }));
 
 app.listen(PORT, () => {

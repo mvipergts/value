@@ -11,6 +11,7 @@
     .card { border: 1px solid #ddd; padding: 12px; border-radius: 8px; margin: 12px 0; }
     label { font-weight: bold; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); gap: 12px; }
+    pre { white-space: pre-wrap; word-break: break-word; }
   </style>
 </head>
 <body>
@@ -33,6 +34,40 @@
   </div>
 
   <div class="card">
+    <h3>Costs (Not on Carfax)</h3>
+    <div class="grid">
+      <div>
+        <label>Hidden Maintenance Cost ($)</label><br/>
+        <input type="number" id="hiddenMaint" min="0" step="1" placeholder="e.g., 450">
+      </div>
+      <div>
+        <label>Add Cost Item</label><br/>
+        <input id="costLabel" placeholder="e.g., Tires, Windshield, Brakes">
+        <input type="number" id="costAmount" min="0" step="1" placeholder="Amount">
+        <button onclick="addCost()">Add</button>
+        <div style="margin-top:6px">
+          Quick add: 
+          <button onclick="quick('Tires',800)">Tires</button>
+          <button onclick="quick('Windshield',350)">Windshield</button>
+          <button onclick="quick('Detailing',150)">Detailing</button>
+        </div>
+      </div>
+    </div>
+    <table style="width:100%; margin-top:10px; border-collapse:collapse">
+      <thead><tr><th style="text-align:left">Item</th><th style="text-align:right">Cost ($)</th><th></th></tr></thead>
+      <tbody id="costRows"></tbody>
+      <tfoot>
+        <tr><td style="text-align:right; font-weight:bold">Additional Costs Total:</td>
+            <td style="text-align:right; font-weight:bold" id="costTotal">$0</td><td></td></tr>
+        <tr><td style="text-align:right; font-weight:bold">Hidden Maintenance:</td>
+            <td style="text-align:right; font-weight:bold" id="hiddenMaintTotal">$0</td><td></td></tr>
+        <tr><td style="text-align:right; font-weight:bold">Grand Total:</td>
+            <td style="text-align:right; font-weight:bold" id="grandTotal">$0</td><td></td></tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div class="card">
     <h3>Appraisal Details</h3>
     <textarea id="vehicle" placeholder="Year Make Model Trim" rows="1" style="width:100%"></textarea>
     <textarea id="notes" placeholder="Notes" rows="3" style="width:100%"></textarea>
@@ -45,9 +80,23 @@
 
   <script>
     let valuation, history, maintenance, carfaxUrl;
+    let costItems = [];
 
     function box(title, json) {
       return `<div><h4>${title}</h4><pre>${JSON.stringify(json, null, 2)}</pre></div>`;
+    }
+    function money(n){ return '$' + Number(n||0).toLocaleString(); }
+    function valueBox(v){
+      const w = (v && v.wholesale!==undefined) ? money(v.wholesale) : '—';
+      const r = (v && v.retail!==undefined) ? money(v.retail) : '—';
+      return `<div>
+        <h4>Value</h4>
+        <div class="card" style="padding:8px">
+          <div class="row"><strong>Wholesale:</strong> <span>${w}</span></div>
+          <div class="row"><strong>Retail:</strong> <span>${r}</span></div>
+        </div>
+        <details style="margin-top:8px"><summary>Raw valuation data</summary><pre>${JSON.stringify(v, null, 2)}</pre></details>
+      </div>`;
     }
 
     async function lookup() {
@@ -57,7 +106,8 @@
       const h = await fetch(`/api/history/${vin}`).then(r=>r.json());
       const m = await fetch(`/api/maintenance/${vin}`).then(r=>r.json());
       valuation = v; history = h; maintenance = m;
-      document.getElementById('results').innerHTML = box('Value', v)+box('History', h)+box('Maintenance', m);
+      document.getElementById('results').innerHTML = valueBox(v)+box('History', h)+box('Maintenance', m);
+      recalcTotals();
     }
 
     async function uploadCarfax() {
@@ -74,13 +124,42 @@
       }
     }
 
+    function formatMoney(n){ return '$' + (Number(n||0)).toLocaleString(); }
+    function renderCosts(){
+      const rows = costItems.map((it, i)=>`<tr>
+          <td>${it.label}</td>
+          <td style="text-align:right">${formatMoney(it.amount)}</td>
+          <td><button onclick="removeCost(${i})">Remove</button></td>
+        </tr>`).join('');
+      document.getElementById('costRows').innerHTML = rows || '<tr><td colspan="3">No additional costs added.</td></tr>';
+    }
+    function recalcTotals(){
+      const addl = costItems.reduce((sum, it)=> sum + Number(it.amount||0), 0);
+      const hidden = Number(document.getElementById('hiddenMaint').value || 0);
+      document.getElementById('costTotal').innerText = formatMoney(addl);
+      document.getElementById('hiddenMaintTotal').innerText = formatMoney(hidden);
+      document.getElementById('grandTotal').innerText = formatMoney(addl + hidden);
+    }
+    function addCost(){
+      const label = document.getElementById('costLabel').value.trim();
+      const amount = Number(document.getElementById('costAmount').value || 0);
+      if (!label || !amount) return alert('Enter an item and amount');
+      costItems.push({ label, amount });
+      document.getElementById('costLabel').value='';
+      document.getElementById('costAmount').value='';
+      renderCosts(); recalcTotals();
+    }
+    function quick(label, amount){ costItems.push({ label, amount }); renderCosts(); recalcTotals(); }
+    function removeCost(i){ costItems.splice(i,1); renderCosts(); recalcTotals(); }
+
     async function saveAppraisal() {
       const vin = document.getElementById('vin').value.trim();
       if (!vin) return alert('Enter a VIN');
       const vehicle = document.getElementById('vehicle').value.trim();
       const notes = document.getElementById('notes').value.trim();
       const reconItems = document.getElementById('recon').value.split(',').map(s=>s.trim()).filter(Boolean);
-      const body = { vin, vehicle, valuation, history, maintenance, notes, reconItems, carfaxUrl };
+      const hiddenMaintenanceCost = Number(document.getElementById('hiddenMaint').value || 0);
+      const body = { vin, vehicle, valuation, history, maintenance, notes, reconItems, carfaxUrl, hiddenMaintenanceCost, additionalCosts: costItems };
       const res = await fetch('/api/appraisals', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
       alert(res.ok ? 'Saved!' : 'Failed to save');
     }
@@ -94,7 +173,7 @@
       const res = await fetch('/api/report', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ vin, vehicle, valuation, history, maintenance, notes, reconItems, carfaxUrl, dealer: { name: 'OpenSource Autos', address: '4801 Lamar Ave, Mission, KS 66202', phone: '(816) 807-8577', site: 'opensourceautos.com' } })
+        body: JSON.stringify({ vin, vehicle, valuation, history, maintenance, notes, reconItems, carfaxUrl, hiddenMaintenanceCost: Number(document.getElementById('hiddenMaint').value||0), additionalCosts: costItems, dealer: { name: 'OpenSource Autos', address: '4801 Lamar Ave, Mission, KS 66202', phone: '(816) 807-8577', site: 'opensourceautos.com' } })
       }).then(r=>r.json());
       if (res.url) window.open(res.url, '_blank'); else alert('Failed to generate PDF');
     }

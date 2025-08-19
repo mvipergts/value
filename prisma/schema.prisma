@@ -17,5 +17,7 @@ model Appraisal {
   notes        String?
   reconItems   Json?
   carfaxUrl    String?
+  hiddenMaintenanceCost Float?
+  additionalCosts Json?
   createdAt    DateTime @default(now())
 }
