@@ -31,6 +31,7 @@
     <input type="file" id="carfax" accept="application/pdf"/>
     <button onclick="uploadCarfax()">Upload</button>
     <div id="carfaxUrl"></div>
+    <div id="carfaxSummaryBox"></div>
   </div>
 
   <div class="card">
@@ -65,6 +66,9 @@
             <td style="text-align:right; font-weight:bold" id="grandTotal">$0</td><td></td></tr>
       </tfoot>
     </table>
+    <div class="row">
+      <button onclick="estimateCosts()">AI: Estimate Hidden Maintenance</button>
+    </div>
   </div>
 
   <div class="card">
@@ -79,7 +83,7 @@
   <p><a href="/appraisals.html">View recent appraisals</a></p>
 
   <script>
-    let valuation, history, maintenance, carfaxUrl;
+    let valuation, history, maintenance, carfaxUrl, carfaxSummary, carfaxText;
     let costItems = [];
 
     function box(title, json) {
@@ -97,6 +101,17 @@
         </div>
         <details style="margin-top:8px"><summary>Raw valuation data</summary><pre>${JSON.stringify(v, null, 2)}</pre></details>
       </div>`;
+    }
+
+    function carfaxBox(s){
+      if (!s) return '';
+      const items = Object.entries(s).filter(([k,v]) => v && ((Array.isArray(v) && v.length) || (!Array.isArray(v))));
+      if (items.length === 0) return '<div class="card"><em>No summary extracted.</em></div>';
+      const html = items.map(([k,v]) => {
+        const val = Array.isArray(v) ? v.join(', ') : String(v);
+        return `<div class="row"><strong>${k}:</strong> <span>${val}</span></div>`;
+      }).join('');
+      return `<div class="card" style="margin-top:8px"><h4>Carfax Summary</h4>${html}</div>`;
     }
 
     async function lookup() {
@@ -118,7 +133,10 @@
       const res = await fetch('/api/carfax/upload', { method: 'POST', body: fd }).then(r=>r.json());
       if (res.url) {
         carfaxUrl = res.url;
+        carfaxSummary = res.summary;
+        carfaxText = res.text;
         document.getElementById('carfaxUrl').innerHTML = `<a href="${res.url}" target="_blank">Uploaded: ${res.url}</a>`;
+        document.getElementById('carfaxSummaryBox').innerHTML = carfaxBox(carfaxSummary);
       } else {
         alert('Upload failed');
       }
@@ -152,6 +170,32 @@
     function quick(label, amount){ costItems.push({ label, amount }); renderCosts(); recalcTotals(); }
     function removeCost(i){ costItems.splice(i,1); renderCosts(); recalcTotals(); }
 
+    async function estimateCosts() {
+      const vin = document.getElementById('vin').value.trim();
+      const vehicle = document.getElementById('vehicle').value.trim();
+      if (!vin) return alert('Enter a VIN first.');
+      const laborRate = 120; // change as needed or surface an input
+
+      const res = await fetch('/api/costs/ai-estimate', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ vin, vehicle, region: 'Kansas City, MO', laborRate, carfaxSummary, carfaxText })
+      }).then(r=>r.json());
+
+      if (!res.ok) return alert('AI estimate failed (missing API key or server error).');
+
+      const est = res.estimate || {};
+      const items = est.items || [];
+      items.forEach(it => costItems.push({ label: it.label, amount: Number(it.amount || 0) }));
+      renderCosts(); recalcTotals();
+
+      if (typeof est.hiddenMaintenanceCost === 'number') {
+        document.getElementById('hiddenMaint').value = est.hiddenMaintenanceCost;
+        recalcTotals();
+      }
+      if (est.notes) alert(est.notes);
+    }
+
     async function saveAppraisal() {
       const vin = document.getElementById('vin').value.trim();
       if (!vin) return alert('Enter a VIN');
@@ -159,7 +203,7 @@
       const notes = document.getElementById('notes').value.trim();
       const reconItems = document.getElementById('recon').value.split(',').map(s=>s.trim()).filter(Boolean);
       const hiddenMaintenanceCost = Number(document.getElementById('hiddenMaint').value || 0);
-      const body = { vin, vehicle, valuation, history, maintenance, notes, reconItems, carfaxUrl, hiddenMaintenanceCost, additionalCosts: costItems };
+      const body = { vin, vehicle, valuation, history, maintenance, notes, reconItems, carfaxUrl, carfaxSummary, hiddenMaintenanceCost, additionalCosts: costItems };
       const res = await fetch('/api/appraisals', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
       alert(res.ok ? 'Saved!' : 'Failed to save');
     }
@@ -173,7 +217,7 @@
       const res = await fetch('/api/report', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ vin, vehicle, valuation, history, maintenance, notes, reconItems, carfaxUrl, hiddenMaintenanceCost: Number(document.getElementById('hiddenMaint').value||0), additionalCosts: costItems, dealer: { name: 'OpenSource Autos', address: '4801 Lamar Ave, Mission, KS 66202', phone: '(816) 807-8577', site: 'opensourceautos.com' } })
+        body: JSON.stringify({ vin, vehicle, valuation, history, maintenance, notes, reconItems, carfaxUrl, carfaxSummary, hiddenMaintenanceCost: Number(document.getElementById('hiddenMaint').value||0), additionalCosts: costItems, dealer: { name: 'OpenSource Autos', address: '4801 Lamar Ave, Mission, KS 66202', phone: '(816) 807-8577', site: 'opensourceautos.com' } })
       }).then(r=>r.json());
       if (res.url) window.open(res.url, '_blank'); else alert('Failed to generate PDF');
     }

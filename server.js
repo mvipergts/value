@@ -4,9 +4,13 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const PDFDocument = require('pdfkit');
+const pdfParse = require('pdf-parse');
+const OpenAI = require('openai');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -33,6 +37,59 @@ if (!fs.existsSync(dataFile)) fs.writeFileSync(dataFile, '[]');
 function readAppraisals() { return JSON.parse(fs.readFileSync(dataFile, 'utf-8')); }
 function writeAppraisals(list) { fs.writeFileSync(dataFile, JSON.stringify(list, null, 2)); }
 
+// --- Helpers ---
+function parseCarfaxText(text) {
+  const lower = text.toLowerCase();
+  const accidents = (text.match(/accident reported/gi) || []).length;
+  const damageReports = (text.match(/damage reported/gi) || []).length;
+
+  let owners = 0;
+  const ownerMatches = text.match(/owner\s+\d+/gi);
+  if (ownerMatches) owners = new Set(ownerMatches.map(s => s.toLowerCase())).size;
+  const ownersNumMatch = text.match(/owners?:\s*(\d{1,2})/i);
+  if (ownersNumMatch) owners = Math.max(owners, parseInt(ownersNumMatch[1], 10));
+
+  const serviceRecords = (text.match(/service\s(record|history|performed|inspected|maintenance)/gi) || []).length;
+  const recalls = (text.match(/recall/gi) || []).length;
+
+  const lastOdoMatch = text.match(/last reported odometer.*?([0-9,]{3,})/i);
+  const lastOdometer = lastOdoMatch ? lastOdoMatch[1] : null;
+
+  const brandings = [];
+  const brandingKeywords = ['salvage','rebuilt','junk','flood','lemon','hail','fire','odometer rollback','not actual mileage','tmu','structural damage'];
+  brandingKeywords.forEach(k => { if (lower.includes(k)) brandings.push(k); });
+
+  let usage = null;
+  if (lower.includes('personal vehicle')) usage = 'Personal';
+  else if (lower.includes('commercial vehicle')) usage = 'Commercial';
+  else if (lower.includes('fleet vehicle')) usage = 'Fleet';
+
+  return { accidents, damageReports, owners, serviceRecords, recalls, lastOdometer, usage, brandings: Array.from(new Set(brandings)) };
+}
+
+function safeOutputText(resp) {
+  try { if (resp.output_text) return resp.output_text; } catch (e) {}
+  try {
+    if (resp.output && Array.isArray(resp.output)) {
+      const parts = [];
+      resp.output.forEach(o => {
+        if (o?.content && Array.isArray(o.content)) {
+          o.content.forEach(c => {
+            if (typeof c === 'string') parts.push(c);
+            else if (c?.text) parts.push(c.text);
+          });
+        }
+      });
+      if (parts.length) return parts.join('\n');
+    }
+  } catch (e) {}
+  try {
+    const choice = resp.choices?.[0];
+    if (choice?.message?.content) return choice.message.content;
+  } catch (e) {}
+  return '';
+}
+
 // --- API STUBS ---
 app.get('/api/value/:vin', async (req, res) => {
   const { vin } = req.params;
@@ -53,14 +110,107 @@ app.get('/api/maintenance/:vin', async (req, res) => {
   res.json({ vin, upcoming: ['Oil change', 'Cabin filter'], intervals: {'Oil change': '5k mi'}, source: 'stub' });
 });
 
-// Carfax PDF upload
-app.post('/api/carfax/upload', upload.single('file'), (req, res) => {
-  const url = `/uploads/${path.basename(req.file.path)}`;
-  res.json({ ok: true, path: req.file.path, url });
+// Carfax PDF upload + parsing
+app.post('/api/carfax/upload', upload.single('file'), async (req, res) => {
+  try {
+    const buffer = fs.readFileSync(req.file.path);
+    const parsed = await pdfParse(buffer);
+    const text = parsed.text || '';
+    const summary = parseCarfaxText(text);
+    const url = `/uploads/${path.basename(req.file.path)}`;
+    res.json({ ok: true, path: req.file.path, url, summary, text });
+  } catch (e) {
+    console.error('Carfax parse failed:', e);
+    const url = `/uploads/${path.basename(req.file.path)}`;
+    res.json({ ok: true, path: req.file.path, url, summary: { error: 'parse_failed' }, text: '' });
+  }
 });
 
 // Publicly serve uploads
 app.use('/uploads', express.static(uploadDir));
+
+// AI cost estimator
+app.post('/api/costs/ai-estimate', async (req, res) => {
+  try {
+    if (!openai) return res.status(400).json({ ok: false, error: 'missing_openai_api_key' });
+
+    const {
+      vin, vehicle, region = 'Kansas City, MO',
+      laborRate = 120, carfaxSummary = {}, carfaxText = ''
+    } = req.body;
+
+    const ruleHints = [];
+    const odo = Number(String(carfaxSummary?.lastOdometer || '0').replace(/,/g, ''));
+    if (odo >= 90000) ruleHints.push("Inspect timing components (if belt), coolant hoses, struts/shocks likely due.");
+    if (odo >= 60000) ruleHints.push("Brakes near end of life; transmission service; spark plugs possible.");
+    if ((carfaxSummary?.serviceRecords ?? 0) < 2) ruleHints.push("Low service history: add fluids and filters baseline.");
+    if ((carfaxSummary?.accidents ?? 0) > 0) ruleHints.push("Check alignment, tires, control arms, suspension wear.");
+    if (carfaxSummary?.usage === 'Fleet') ruleHints.push("Fleet usage: bushings, brakes, tires, battery, alternator.");
+
+    const jsonSchema = {
+      name: "HiddenMaintenanceEstimate",
+      schema: {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                label: { type: "string" },
+                amount: { type: "number" },
+                laborHours: { type: "number" },
+                risk: { type: "string", enum: ["low","medium","high"] },
+                rationale: { type: "string" }
+              },
+              required: ["label", "amount"]
+            }
+          },
+          hiddenMaintenanceCost: { type: "number" },
+          notes: { type: "string" }
+        },
+        required: ["items"]
+      },
+      strict: true
+    };
+
+    const prompt = `You are a dealership service estimator. Using the vehicle info, region, labor rate, and the Carfax text & summary, propose maintenance costs that are LIKELY NEEDED BUT NOT explicitly listed on the Carfax.
+- Output a careful, realistic estimate for ${region} parts+labor using laborRate = $${laborRate}/hr.
+- Consider mileage, age, usage (fleet/personal), low service history, accidents, and common wear items.
+- Return items like: Tires, Brakes, Alignment, Battery, Fluids+Filters bundle, Struts/Shocks, Belts/Hoses, Windshield, Wipers, Cabin/Air filters, Spark plugs, Transmission service, Coolant service, AC recharge/drier, Control arms/bushings, Wheel bearing(s), etc.
+- DO NOT duplicate items already confirmed on Carfax. Focus on gaps/likely needs.
+- Include a brief rationale per item and a risk level.
+- Strict JSON per provided schema.
+
+Vehicle: ${vehicle || "Unknown"}
+VIN: ${vin || "Unknown"}
+Region: ${region}
+Labor rate: $${laborRate}/hr
+
+Rule hints (heuristics):
+${ruleHints.map(h => `- ${h}`).join('\n')}
+
+Carfax summary (JSON):
+${JSON.stringify(carfaxSummary, null, 2)}
+
+Carfax text (first 6000 chars):
+${carfaxText.slice(0, 6000)}
+`;
+
+    const resp = await openai.responses.create({
+      model: "gpt-4o",
+      input: prompt,
+      response_format: { type: "json_schema", json_schema: jsonSchema }
+    });
+
+    const outputText = safeOutputText(resp);
+    const data = JSON.parse(outputText || "{}");
+    return res.json({ ok: true, estimate: data });
+  } catch (err) {
+    console.error("ai-estimate error", err);
+    return res.status(500).json({ ok: false, error: "ai_estimate_failed" });
+  }
+});
 
 // Appraisals
 app.post('/api/appraisals', (req, res) => {
@@ -83,7 +233,7 @@ const reportsDir = path.join(__dirname, 'reports');
 if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
 
 app.post('/api/report', (req, res) => {
-  const { vin, vehicle, valuation, history, maintenance, notes, reconItems, carfaxUrl, dealer, hiddenMaintenanceCost, additionalCosts } = req.body;
+  const { vin, vehicle, valuation, history, maintenance, notes, reconItems, carfaxUrl, carfaxSummary, dealer, hiddenMaintenanceCost, additionalCosts } = req.body;
   const filePath = path.join(reportsDir, `${vin || 'report'}_${Date.now()}.pdf`);
   const doc = new PDFDocument({ margin: 40 });
   const stream = fs.createWriteStream(filePath);
@@ -117,6 +267,16 @@ app.post('/api/report', (req, res) => {
   // Maintenance
   doc.moveDown().fontSize(12).text('Maintenance', { underline: true });
   doc.fontSize(10).text(typeof maintenance === 'string' ? maintenance : JSON.stringify(maintenance, null, 2));
+
+  // Carfax Summary (if available)
+  if (carfaxSummary && typeof carfaxSummary === 'object') {
+    doc.moveDown().fontSize(12).text('Carfax Summary', { underline: true });
+    Object.entries(carfaxSummary).forEach(([k, v]) => {
+      if (v === undefined || v === null || (Array.isArray(v) && v.length === 0)) return;
+      const val = Array.isArray(v) ? v.join(', ') : String(v);
+      doc.fontSize(10).text(`${k}: ${val}`);
+    });
+  }
 
   // Notes
   if (notes) {

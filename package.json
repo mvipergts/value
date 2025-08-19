@@ -1,7 +1,7 @@
 {
   "name": "used-car-project",
   "version": "1.0.0",
-  "description": "Used Car Project - valuation, history, maintenance, appraisals, PDF export, Carfax upload",
+  "description": "Used Car Project - appraisal tool with Carfax parsing and AI cost estimator",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -11,7 +11,9 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "multer": "^1.4.5-lts.1",
-    "pdfkit": "^0.13.0"
+    "pdfkit": "^0.13.0",
+    "pdf-parse": "^1.1.1",
+    "openai": "^4.53.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

@@ -8,16 +8,17 @@ generator client {
 }
 
 model Appraisal {
-  id           Int      @id @default(autoincrement())
-  vin          String
-  vehicle      String?
-  valuation    Json?
-  history      Json?
-  maintenance  Json?
-  notes        String?
-  reconItems   Json?
-  carfaxUrl    String?
+  id                    Int      @id @default(autoincrement())
+  vin                   String
+  vehicle               String?
+  valuation             Json?
+  history               Json?
+  maintenance           Json?
+  notes                 String?
+  reconItems            Json?
+  carfaxUrl             String?
+  carfaxSummary         Json?
   hiddenMaintenanceCost Float?
-  additionalCosts Json?
-  createdAt    DateTime @default(now())
+  additionalCosts       Json?
+  createdAt             DateTime @default(now())
 }

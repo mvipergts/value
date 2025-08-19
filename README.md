@@ -1,12 +1,10 @@
-# Used Car Project (v2)
+# Used Car Project (v4) — AI Cost Estimator + Carfax Parsing
 
-Includes:
-- VIN lookup stubs
-- Carfax PDF upload
-- Appraisal save/list
-- PDF report with branding
-- **Costs**: Hidden maintenance + line items (tires, windshield, etc.) with totals
-- **Valuation**: Shows **Wholesale** and **Retail** prices
+Adds:
+- **Carfax PDF parsing** on upload (extracts accidents, owners, service records, recalls, odometer, usage, brandings).
+- **AI: Estimate Hidden Maintenance** button that asks ChatGPT to propose maintenance items NOT explicitly on Carfax (tires, brakes, fluids, etc.), with amounts.
+- **Wholesale/Retail** valuation display, saved and included in PDF.
+- **Costs** card (hidden maintenance + additional line items + totals).
 
 ## Quick Start (local)
 ```
@@ -15,16 +13,17 @@ npm run dev
 # open http://localhost:3000
 ```
 
-## Render (Web Service)
+## Deploy on Render
 - Build: `npm install`
 - Start: `node server.js`
-- Optional env: `VEHICLE_DATABASES_AUTH_KEY`, `PORT`
-- Optional disk: mount `/uploads` for persistent Carfax files
+- Env vars:
+  - `OPENAI_API_KEY` (required for AI estimator)
+  - Optional: `PORT`, `VEHICLE_DATABASES_AUTH_KEY`
+- Optional disk: mount `/uploads` to persist Carfax PDFs
 
-## Endpoints
-- `GET /api/value/:vin` → returns { estimate, wholesale, retail }
-- `GET /api/history/:vin`
-- `GET /api/maintenance/:vin`
-- `POST /api/carfax/upload` (field: `file`)
+## Key Endpoints
+- `POST /api/carfax/upload` → parses PDF → `{ url, summary, text }`
+- `POST /api/costs/ai-estimate` → sends Carfax text+summary to ChatGPT → returns JSON { items[], hiddenMaintenanceCost?, notes? }
+- `GET /api/value/:vin` → stub valuation with `wholesale` and `retail`
 - `POST /api/appraisals` / `GET /api/appraisals`
-- `POST /api/report` (generates PDF)
+- `POST /api/report` → PDF includes Valuation, History, Maintenance, Carfax Summary, and Costs Summary

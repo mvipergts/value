@@ -19,7 +19,7 @@
     <button onclick="load()">Search</button>
   </div>
   <table>
-    <thead><tr><th>When</th><th>VIN</th><th>Vehicle</th><th>Value (W/R)</th><th>Costs</th><th>PDF</th></tr></thead>
+    <thead><tr><th>When</th><th>VIN</th><th>Vehicle</th><th>Value (W/R)</th><th>CFX (acc/owners)</th><th>Costs</th><th>PDF</th></tr></thead>
     <tbody id="rows"></tbody>
   </table>
 
@@ -35,9 +35,12 @@
         const total = addl + hidden;
         const w = a?.valuation?.wholesale; const r = a?.valuation?.retail;
         const wr = (w||r) ? `$${Number(w||0).toLocaleString()} / $${Number(r||0).toLocaleString()}` : '';
-        return `<tr><td>${when}</td><td>${a.vin||''}</td><td>${a.vehicle||''}</td><td>${wr}</td><td>$${total.toLocaleString()}</td><td><button onclick="regen('${a.vin||''}', '${a.vehicle||''}')">Regenerate PDF</button></td></tr>`;
+        const acc = a?.carfaxSummary?.accidents ?? 0;
+        const own = a?.carfaxSummary?.owners ?? '';
+        const cfx = (acc || own) ? `${acc} / ${own}` : '';
+        return `<tr><td>${when}</td><td>${a.vin||''}</td><td>${a.vehicle||''}</td><td>${wr}</td><td>${cfx}</td><td>$${total.toLocaleString()}</td><td><button onclick="regen('${a.vin||''}', '${a.vehicle||''}')">Regenerate PDF</button></td></tr>`;
       }).join('');
-      document.getElementById('rows').innerHTML = rows || '<tr><td colspan="6">No appraisals yet.</td></tr>';
+      document.getElementById('rows').innerHTML = rows || '<tr><td colspan="7">No appraisals yet.</td></tr>';
     }
     async function regen(vin, vehicle) {
       const res = await fetch('/api/report', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle }) }).then(r=>r.json());
