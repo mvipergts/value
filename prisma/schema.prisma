@@ -1,0 +1,21 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Appraisal {
+  id           Int      @id @default(autoincrement())
+  vin          String
+  vehicle      String?
+  valuation    Json?
+  history      Json?
+  maintenance  Json?
+  notes        String?
+  reconItems   Json?
+  carfaxUrl    String?
+  createdAt    DateTime @default(now())
+}

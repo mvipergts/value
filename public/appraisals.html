@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Recent Appraisals</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 960px; margin: 0 auto; padding: 20px; }
+    input, button { padding: 8px; margin: 6px 0; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 8px; }
+    th { background: #f6f6f6; }
+  </style>
+</head>
+<body>
+  <h1>Recent Appraisals</h1>
+  <div>
+    <input id="vin" placeholder="Filter by VIN"/>
+    <button onclick="load()">Search</button>
+  </div>
+  <table>
+    <thead><tr><th>When</th><th>VIN</th><th>Vehicle</th><th>PDF</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <script>
+    async function load() {
+      const vin = document.getElementById('vin').value.trim();
+      const q = vin ? ('?vin=' + encodeURIComponent(vin)) : '';
+      const list = await fetch('/api/appraisals' + q).then(r=>r.json());
+      const rows = list.map(a => {
+        const when = new Date(a.createdAt).toLocaleString();
+        return `<tr><td>${when}</td><td>${a.vin||''}</td><td>${a.vehicle||''}</td><td><button onclick="regen('${a.vin||''}', '${a.vehicle||''}')">Regenerate PDF</button></td></tr>`;
+      }).join('');
+      document.getElementById('rows').innerHTML = rows || '<tr><td colspan="4">No appraisals yet.</td></tr>';
+    }
+    async function regen(vin, vehicle) {
+      const res = await fetch('/api/report', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle }) }).then(r=>r.json());
+      if (res.url) window.open(res.url, '_blank');
+    }
+    load();
+  </script>
+</body>
+</html>
