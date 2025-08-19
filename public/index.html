@@ -12,6 +12,10 @@
     label { font-weight: bold; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); gap: 12px; }
     pre { white-space: pre-wrap; word-break: break-word; }
+    .stat { display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #eee; }
+    .stat:last-child { border-bottom:0; }
+    .kv { display:grid; grid-template-columns:auto 1fr; gap:6px 12px; }
+    .muted { color:#666; font-size:12px; }
   </style>
 </head>
 <body>
@@ -86,9 +90,6 @@
     let valuation, history, maintenance, carfaxUrl, carfaxSummary, carfaxText;
     let costItems = [];
 
-    function box(title, json) {
-      return `<div><h4>${title}</h4><pre>${JSON.stringify(json, null, 2)}</pre></div>`;
-    }
     function money(n){ return '$' + Number(n||0).toLocaleString(); }
     function valueBox(v){
       const w = (v && v.wholesale!==undefined) ? money(v.wholesale) : '—';
@@ -96,22 +97,38 @@
       return `<div>
         <h4>Value</h4>
         <div class="card" style="padding:8px">
-          <div class="row"><strong>Wholesale:</strong> <span>${w}</span></div>
-          <div class="row"><strong>Retail:</strong> <span>${r}</span></div>
+          <div class="stat"><span><strong>Wholesale</strong></span><span>${w}</span></div>
+          <div class="stat"><span><strong>Retail</strong></span><span>${r}</span></div>
         </div>
-        <details style="margin-top:8px"><summary>Raw valuation data</summary><pre>${JSON.stringify(v, null, 2)}</pre></details>
+        <details class="muted" style="margin-top:8px"><summary>Raw valuation data</summary><pre>${JSON.stringify(v, null, 2)}</pre></details>
       </div>`;
     }
-
-    function carfaxBox(s){
-      if (!s) return '';
-      const items = Object.entries(s).filter(([k,v]) => v && ((Array.isArray(v) && v.length) || (!Array.isArray(v))));
-      if (items.length === 0) return '<div class="card"><em>No summary extracted.</em></div>';
-      const html = items.map(([k,v]) => {
-        const val = Array.isArray(v) ? v.join(', ') : String(v);
-        return `<div class="row"><strong>${k}:</strong> <span>${val}</span></div>`;
-      }).join('');
-      return `<div class="card" style="margin-top:8px"><h4>Carfax Summary</h4>${html}</div>`;
+    function historyBox(h){
+      const acc    = (h && h.accidents != null)      ? h.accidents      : '—';
+      const owners = (h && h.owners != null)         ? h.owners         : '—';
+      const svc    = (h && h.serviceRecords != null) ? h.serviceRecords : '—';
+      return `<div>
+        <h4>History</h4>
+        <div class="card" style="padding:8px">
+          <div class="stat"><span><strong>Accidents</strong></span><span>${acc}</span></div>
+          <div class="stat"><span><strong>Owners</strong></span><span>${owners}</span></div>
+          <div class="stat"><span><strong>Service Records</strong></span><span>${svc}</span></div>
+        </div>
+        <details class="muted" style="margin-top:8px"><summary>Raw history data</summary><pre>${JSON.stringify(h, null, 2)}</pre></details>
+      </div>`;
+    }
+    function maintenanceBox(m){
+      const up = (m && Array.isArray(m.upcoming)) ? m.upcoming.map(x=>`<li>${x}</li>`).join('') : '<li>—</li>';
+      const intervals = (m && m.intervals) ? Object.entries(m.intervals).map(([k,v])=>`<li><strong>${k}:</strong> ${v}</li>`).join('') : '';
+      return `<div>
+        <h4>Maintenance</h4>
+        <div class="card" style="padding:8px">
+          <div><strong>Upcoming</strong></div>
+          <ul style="margin:6px 0 0 18px">${up}</ul>
+          ${intervals ? `<div style="margin-top:8px"><strong>Intervals</strong><ul style="margin:6px 0 0 18px">${intervals}</ul></div>` : ''}
+        </div>
+        <details class="muted" style="margin-top:8px"><summary>Raw maintenance data</summary><pre>${JSON.stringify(m, null, 2)}</pre></details>
+      </div>`;
     }
 
     async function lookup() {
@@ -121,7 +138,7 @@
       const h = await fetch(`/api/history/${vin}`).then(r=>r.json());
       const m = await fetch(`/api/maintenance/${vin}`).then(r=>r.json());
       valuation = v; history = h; maintenance = m;
-      document.getElementById('results').innerHTML = valueBox(v)+box('History', h)+box('Maintenance', m);
+      document.getElementById('results').innerHTML = valueBox(v)+historyBox(h)+maintenanceBox(m);
       recalcTotals();
     }
 
@@ -140,6 +157,17 @@
       } else {
         alert('Upload failed');
       }
+    }
+
+    function carfaxBox(s){
+      if (!s) return '';
+      const items = Object.entries(s).filter(([k,v]) => v && ((Array.isArray(v) && v.length) || (!Array.isArray(v))));
+      if (items.length === 0) return '<div class="card"><em>No summary extracted.</em></div>';
+      const html = items.map(([k,v]) => {
+        const val = Array.isArray(v) ? v.join(', ') : String(v);
+        return `<div class="stat"><span><strong>${k}</strong></span><span>${val}</span></div>`;
+      }).join('');
+      return `<div class="card" style="margin-top:8px"><h4>Carfax Summary</h4>${html}</div>`;
     }
 
     function formatMoney(n){ return '$' + (Number(n||0)).toLocaleString(); }
@@ -174,25 +202,18 @@
       const vin = document.getElementById('vin').value.trim();
       const vehicle = document.getElementById('vehicle').value.trim();
       if (!vin) return alert('Enter a VIN first.');
-      const laborRate = 120; // change as needed or surface an input
-
+      const laborRate = 120;
       const res = await fetch('/api/costs/ai-estimate', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ vin, vehicle, region: 'Kansas City, MO', laborRate, carfaxSummary, carfaxText })
       }).then(r=>r.json());
-
       if (!res.ok) return alert('AI estimate failed (missing API key or server error).');
-
       const est = res.estimate || {};
       const items = est.items || [];
       items.forEach(it => costItems.push({ label: it.label, amount: Number(it.amount || 0) }));
       renderCosts(); recalcTotals();
-
-      if (typeof est.hiddenMaintenanceCost === 'number') {
-        document.getElementById('hiddenMaint').value = est.hiddenMaintenanceCost;
-        recalcTotals();
-      }
+      if (typeof est.hiddenMaintenanceCost === 'number') { document.getElementById('hiddenMaint').value = est.hiddenMaintenanceCost; recalcTotals(); }
       if (est.notes) alert(est.notes);
     }
 

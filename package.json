@@ -1,6 +1,6 @@
 {
   "name": "used-car-project",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Used Car Project - appraisal tool with Carfax parsing and AI cost estimator",
   "main": "server.js",
   "scripts": {
