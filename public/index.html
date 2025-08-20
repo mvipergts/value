@@ -4,7 +4,43 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Car Value, History & Maintenance Tool</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    :root{
+      --bg:#0b0f1a;
+      --surface:#0f172a;
+      --card:#111827;
+      --card-2:#0b1220;
+      --text:#e5e7eb;
+      --muted:#94a3b8;
+      --primary:#2563eb;
+      --border:#1f2937;
+      --accent:#1e293b;
+    }
+    *{ box-sizing: border-box; }
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji','Segoe UI Emoji'; 
+      max-width: 1100px; margin: 0 auto; padding: 24px; background: var(--bg); color: var(--text); }
+    h1{ font-weight:700; letter-spacing:.2px; }
+    input, button, textarea { padding: 10px 12px; margin: 6px 0; border-radius:10px; border:1px solid var(--border); background: var(--surface); color: var(--text); }
+    input::placeholder, textarea::placeholder{ color:#64748b; }
+    button { background: var(--primary); border:none; color:white; font-weight:600; cursor:pointer; box-shadow: 0 6px 16px rgba(37,99,235,.25); }
+    button:hover{ filter: brightness(1.05); }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .card { border: 1px solid var(--border); background: linear-gradient(180deg, var(--card), var(--card-2)); padding: 16px; border-radius: 16px; margin: 14px 0; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+    label { font-weight: 600; color: var(--muted); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 14px; }
+    pre { white-space: pre-wrap; word-break: break-word; background: #0a0f1a; padding: 12px; border-radius: 12px; border:1px dashed var(--accent); }
+    .stat { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px dashed var(--accent); font-size:14px; }
+    .stat:last-child { border-bottom:0; }
+    .muted { color:var(--muted); font-size:12px; }
+    .section-title{ font-weight:600; color:#93c5fd; text-transform:uppercase; font-size:12px; letter-spacing:.14em; }
+    .badge { display:inline-block; padding:4px 8px; border-radius:999px; background:#0ea5e9; color:#001018; font-weight:700; font-size:12px; }
+    .kv { display:grid; grid-template-columns:auto 1fr; gap:6px 12px; }
+    a{ color:#93c5fd; }
+    .spinner{ display:none; width:18px; height:18px; border:3px solid #1f2937; border-top-color:#60a5fa; border-radius:50%; animation:spin 1s linear infinite; }
+    .loading .spinner{ display:inline-block; }
+    @keyframes spin{ to{ transform: rotate(360deg);} }
+  
     body { font-family: Arial, sans-serif; max-width: 960px; margin: 0 auto; padding: 20px; }
     input, button, textarea { padding: 8px; margin: 6px 0; }
     .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
@@ -33,11 +69,15 @@
   </div>
 
   <div class="card">
-    <h3>Upload Carfax PDF</h3>
-    <input type="file" id="carfax" accept="application/pdf"/>
-    <button onclick="uploadCarfax()">Upload</button>
-    <div id="carfaxUrl"></div>
-    <div id="carfaxSummaryBox"></div>
+    <div class="section-title">Carfax</div>
+    <h3 style="margin-top:6px">Upload Carfax PDF</h3>
+    <div class="row"><input type="file" id="carfax" accept="application/pdf"/> <button onclick="uploadCarfax()">Upload</button> <div class="spinner" id="carfaxSpin"></div></div>
+<div id="carfaxUrl" class="muted"></div>
+<div id="carfaxSummaryBox"></div>
+<details style="margin-top:12px"><summary class="muted">Paste Carfax text (if your PDF is scanned)</summary>
+<textarea id="carfaxPaste" rows="6" style="width:100%" placeholder="Paste Carfax text here..."></textarea>
+<div class="row"><button onclick="summarizeCarfaxText()">Summarize Text</button><div class="muted">This uses the same extractor (no cost).</div></div>
+</details>
   </div>
 
   <div class="card">
@@ -99,7 +139,7 @@
       const y = d?.year || '—', make = d?.make || '—', model = d?.model || '—', trim = d?.trim || '';
       const label = [y, make, model, trim].filter(Boolean).join(' ');
       const miles = document.getElementById('mileage')?.value || '';
-      return `<div class="card" style="padding:8px; background:#fafafa"><strong>${label}</strong>${d?.bodyClass ? ` · ${d.bodyClass}` : ''}${miles?` · ${Number(miles).toLocaleString()} mi`:''}</div>`;
+      return `<div class="card" style="padding:12px; background: linear-gradient(180deg,#0b1220,#0b1220)"><strong style="font-size:16px">${label}</strong>${d?.bodyClass ? ` · ${d.bodyClass}` : ''}${miles?` · ${Number(miles).toLocaleString()} mi`:''}</div>`;
     }
     function valueBox(v){
       const w = (v && v.wholesale!==undefined) ? money(v.wholesale) : '—';

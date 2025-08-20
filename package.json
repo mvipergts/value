@@ -1,6 +1,6 @@
 {
   "name": "used-car-project",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Used Car Project - appraisal tool with VIN decode, mileage-aware valuation, Carfax parsing, AI estimates",
   "main": "server.js",
   "scripts": {
