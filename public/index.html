@@ -28,6 +28,7 @@
       <input id="vin" placeholder="e.g., 1G1ZE5ST0GF253821" style="flex:1;"/>
       <button onclick="lookup()">Lookup</button>
     </div>
+    <div id="decodedBanner" class="muted" style="margin-top:6px"></div>
     <div id="results" class="grid"></div>
   </div>
 
@@ -94,6 +95,11 @@
     let commonIssues = null;
 
     function money(n){ return '$' + Number(n||0).toLocaleString(); }
+    function vehicleBanner(d){
+      const y = d?.year || '—', make = d?.make || '—', model = d?.model || '—', trim = d?.trim || '';
+      const label = [y, make, model, trim].filter(Boolean).join(' ');
+      return `<div class="card" style="padding:8px; background:#fafafa"><strong>${label}</strong>${d?.bodyClass ? ` · ${d.bodyClass}` : ''}</div>`;
+    }
     function valueBox(v){
       const w = (v && v.wholesale!==undefined) ? money(v.wholesale) : '—';
       const r = (v && v.retail!==undefined) ? money(v.retail) : '—';
@@ -147,6 +153,26 @@
     async function lookup() {
       const vin = document.getElementById('vin').value.trim();
       if (!vin) return alert('Enter a VIN');
+
+      // 1) Decode VIN first
+      let decoded = null;
+      try {
+        decoded = await fetch(`/api/vin/${encodeURIComponent(vin)}`).then(r=>r.json());
+        if (decoded && decoded.ok) {
+          document.getElementById('decodedBanner').innerHTML = vehicleBanner(decoded);
+          const vField = document.getElementById('vehicle');
+          if (vField && !vField.value.trim()) {
+            const parts = [decoded.year, decoded.make, decoded.model, decoded.trim].filter(Boolean);
+            vField.value = parts.join(' ');
+          }
+        } else {
+          document.getElementById('decodedBanner').innerHTML = '<div class="muted">VIN decode unavailable</div>';
+        }
+      } catch(e) {
+        document.getElementById('decodedBanner').innerHTML = '<div class="muted">VIN decode failed</div>';
+      }
+
+      // 2) Load value/history/maintenance
       const v = await fetch(`/api/value/${vin}`).then(r=>r.json());
       const h = await fetch(`/api/history/${vin}`).then(r=>r.json());
       const m = await fetch(`/api/maintenance/${vin}`).then(r=>r.json());
@@ -155,7 +181,7 @@
       recalcTotals();
     }
 
-    async function uploadCarfax() {
+        async function uploadCarfax() {
       const file = document.getElementById('carfax').files[0];
       if (!file) return alert('Choose a PDF first');
       const fd = new FormData();

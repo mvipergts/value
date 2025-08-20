@@ -125,6 +125,32 @@ app.post('/api/carfax/upload', upload.single('file'), async (req, res) => {
   }
 });
 app.use('/uploads', express.static(uploadDir));
+// ---------- VIN decode (NHTSA VPIC) ----------
+app.get('/api/vin/:vin', async (req, res) => {
+  try {
+    const vin = String(req.params.vin || '').trim();
+    if (!vin) return res.status(400).json({ ok:false, error:'no_vin' });
+    const url = `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`;
+    const r = await fetch(url);
+    if (!r.ok) return res.status(502).json({ ok:false, error:'vpic_unavailable' });
+    const j = await r.json();
+    const row = (j && j.Results && j.Results[0]) ? j.Results[0] : {};
+    const year = row.ModelYear || null;
+    const make = row.Make || null;
+    const model = row.Model || null;
+    const trim = row.Trim || row.Series || null;
+    const bodyClass = row.BodyClass || null;
+    const engine = [row.EngineCylinders, row.DisplacementL ? `${row.DisplacementL}L` : null].filter(Boolean).join(' / ') || null;
+    const fuel = row.FuelTypePrimary || null;
+    const transmission = [row.TransmissionStyle, row.TransmissionSpeeds ? `${row.TransmissionSpeeds}-speed` : null].filter(Boolean).join(' ') || null;
+    const out = { vin, year, make, model, trim, bodyClass, engine, fuel, transmission, raw: row };
+    return res.json({ ok:true, ...out });
+  } catch (e) {
+    console.error('vin decode error', e);
+    return res.status(500).json({ ok:false, error:'vin_decode_failed' });
+  }
+});
+
 
 // --- maintenance costs from 'upcoming'
 app.post('/api/maintenance/costs', async (req, res) => {
