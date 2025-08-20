@@ -6,31 +6,41 @@
   <title>Car Value, History & Maintenance Tool</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    :root{
-      --bg:#0b0f1a;
-      --surface:#0f172a;
+    :root[data-theme="dark"]{
+      --bg:#0c111c;
+      --surface:#111827;
       --card:#111827;
-      --card-2:#0b1220;
-      --text:#e5e7eb;
-      --muted:#94a3b8;
-      --primary:#2563eb;
-      --border:#1f2937;
+      --card-2:#0f172a;
+      --text:#e9edf5;
+      --muted:#b8c2d6;
+      --primary:#3b82f6;
+      --border:#223047;
       --accent:#1e293b;
     }
+    :root[data-theme="light"]{
+      --bg:#f7fafc;
+      --surface:#ffffff;
+      --card:#ffffff;
+      --card-2:#f8fafc;
+      --text:#0f172a;
+      --muted:#475569;
+      --primary:#2563eb;
+      --border:#d6e0ee;
+      --accent:#e2e8f0;
+    }
     *{ box-sizing: border-box; }
-    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji','Segoe UI Emoji'; 
-      max-width: 1100px; margin: 0 auto; padding: 24px; background: var(--bg); color: var(--text); }
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji','Segoe UI Emoji'; max-width: 1100px; margin: 0 auto; padding: 28px; background: var(--bg); color: var(--text); font-size:16px; line-height:1.5; }
     h1{ font-weight:700; letter-spacing:.2px; }
-    input, button, textarea { padding: 10px 12px; margin: 6px 0; border-radius:10px; border:1px solid var(--border); background: var(--surface); color: var(--text); }
+    input, button, textarea { padding: 12px 14px; margin: 6px 0; border-radius:10px; border:1px solid var(--border); background: var(--surface); color: var(--text); font-size:15px; }
     input::placeholder, textarea::placeholder{ color:#64748b; }
     button { background: var(--primary); border:none; color:white; font-weight:600; cursor:pointer; box-shadow: 0 6px 16px rgba(37,99,235,.25); }
     button:hover{ filter: brightness(1.05); }
     .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-    .card { border: 1px solid var(--border); background: linear-gradient(180deg, var(--card), var(--card-2)); padding: 16px; border-radius: 16px; margin: 14px 0; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+    .card { border: 1px solid var(--border); background: linear-gradient(180deg, var(--card), var(--card-2)); padding: 18px; border-radius: 16px; margin: 16px 0; box-shadow: 0 8px 30px rgba(0,0,0,.12); }
     label { font-weight: 600; color: var(--muted); }
     .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 14px; }
     pre { white-space: pre-wrap; word-break: break-word; background: #0a0f1a; padding: 12px; border-radius: 12px; border:1px dashed var(--accent); }
-    .stat { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px dashed var(--accent); font-size:14px; }
+    .stat { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--accent); font-size:15px; }
     .stat:last-child { border-bottom:0; }
     .muted { color:var(--muted); font-size:12px; }
     .section-title{ font-weight:600; color:#93c5fd; text-transform:uppercase; font-size:12px; letter-spacing:.14em; }
@@ -54,8 +64,8 @@
     .muted { color:#666; font-size:12px; }
   </style>
 </head>
-<body>
-  <h1>Car Value, History & Maintenance Tool</h1>
+<body data-theme="dark">
+  <div style="display:flex; justify-content:space-between; align-items:center; gap:12px"><h1 style="margin:0">Car Value, History & Maintenance Tool</h1><button id="themeBtn" onclick="toggleTheme()" style="background:#334155">Light mode</button></div>
 
   <div class="card">
     <label>VIN</label>
@@ -139,7 +149,7 @@
       const y = d?.year || '—', make = d?.make || '—', model = d?.model || '—', trim = d?.trim || '';
       const label = [y, make, model, trim].filter(Boolean).join(' ');
       const miles = document.getElementById('mileage')?.value || '';
-      return `<div class="card" style="padding:12px; background: linear-gradient(180deg,#0b1220,#0b1220)"><strong style="font-size:16px">${label}</strong>${d?.bodyClass ? ` · ${d.bodyClass}` : ''}${miles?` · ${Number(miles).toLocaleString()} mi`:''}</div>`;
+      return `<div class=\"card\" style=\"padding:14px; background: var(--surface); border:2px solid var(--accent)\"><strong style=\"font-size:18px\">${label}</strong>${d?.bodyClass ? ` · ${d.bodyClass}` : ''}${miles?` · ${Number(miles).toLocaleString()} mi`:''}</div>`;
     }
     function valueBox(v){
       const w = (v && v.wholesale!==undefined) ? money(v.wholesale) : '—';
@@ -243,7 +253,7 @@
 
     function carfaxBox(s){
       if (!s) return '';
-      const items = Object.entries(s).filter(([k,v]) => v && ((Array.isArray(v) && v.length) || (!Array.isArray(v))));
+      const items = Object.entries(s).filter(([k,v]) => k !== 'note' && v && ((Array.isArray(v) && v.length) || (!Array.isArray(v))));
       if (items.length === 0) return '<div class="card"><em>No summary extracted.</em></div>';
       const html = items.map(([k,v]) => {
         const val = Array.isArray(v) ? v.join(', ') : String(v);
@@ -352,6 +362,24 @@
       }).then(r=>r.json());
       if (res.url) window.open(res.url, '_blank'); else alert('Failed to generate PDF');
     }
-  </script>
+  
+    function toggleTheme(){
+      const root = document.body;
+      const current = root.getAttribute('data-theme') || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      const btn = document.getElementById('themeBtn');
+      btn.textContent = next === 'dark' ? 'Light mode' : 'Dark mode';
+      btn.style.background = next === 'dark' ? '#334155' : '#0f172a';
+    }
+    function openPaste(){
+      const det = document.querySelector('details');
+      if (det && !det.open) det.open = true;
+      const ta = document.getElementById('carfaxPaste');
+      if (ta) ta.focus();
+      window.scrollTo({ top: det.offsetTop - 40, behavior: 'smooth' });
+    }
+</script>
+
 </body>
 </html>
