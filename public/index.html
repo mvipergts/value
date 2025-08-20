@@ -13,7 +13,8 @@
       --card-2:#0f172a;
       --text:#e9edf5;
       --muted:#b8c2d6;
-      --primary:#3b82f6;
+      --primary:#2563eb;
+      --btn-text:#ffffff;
       --border:#223047;
       --accent:#1e293b;
     }
@@ -25,6 +26,7 @@
       --text:#0f172a;
       --muted:#475569;
       --primary:#2563eb;
+      --btn-text:#ffffff;
       --border:#d6e0ee;
       --accent:#e2e8f0;
     }
@@ -33,8 +35,8 @@
     h1{ font-weight:700; letter-spacing:.2px; }
     input, button, textarea { padding: 12px 14px; margin: 6px 0; border-radius:10px; border:1px solid var(--border); background: var(--surface); color: var(--text); font-size:15px; }
     input::placeholder, textarea::placeholder{ color:#64748b; }
-    button { background: var(--primary); border:none; color:white; font-weight:600; cursor:pointer; box-shadow: 0 6px 16px rgba(37,99,235,.25); }
-    button:hover{ filter: brightness(1.05); }
+    button { background: var(--primary) !important; border:1px solid var(--border); color: var(--btn-text) !important; font-weight:700; cursor:pointer; box-shadow: 0 6px 16px rgba(37,99,235,.25); letter-spacing:.2px; }
+    button:hover{ filter: brightness(1.05); transform: translateY(-1px); }
     .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
     .card { border: 1px solid var(--border); background: linear-gradient(180deg, var(--card), var(--card-2)); padding: 18px; border-radius: 16px; margin: 16px 0; box-shadow: 0 8px 30px rgba(0,0,0,.12); }
     label { font-weight: 600; color: var(--muted); }
@@ -63,6 +65,10 @@
     .kv { display:grid; grid-template-columns:auto 1fr; gap:6px 12px; }
     .muted { color:#666; font-size:12px; }
   </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script>pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";</script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body data-theme="dark">
   <div style="display:flex; justify-content:space-between; align-items:center; gap:12px"><h1 style="margin:0">Car Value, History & Maintenance Tool</h1><button id="themeBtn" onclick="toggleTheme()" style="background:#334155">Light mode</button></div>
@@ -81,7 +87,7 @@
   <div class="card">
     <div class="section-title">Carfax</div>
     <h3 style="margin-top:6px">Upload Carfax PDF</h3>
-    <div class="row"><input type="file" id="carfax" accept="application/pdf"/> <button onclick="uploadCarfax()">Upload</button> <div class="spinner" id="carfaxSpin"></div></div>
+    <div class="row"><input type="file" id="carfax" accept="application/pdf,image/*"/> <button onclick="uploadCarfax()">Upload</button> <button onclick="ocrLocal()" title="OCR scanned PDF or image">OCR scanned PDF</button> <div class="spinner" id="carfaxSpin"></div></div>
 <div id="carfaxUrl" class="muted"></div>
 <div id="carfaxSummaryBox"></div>
 <details style="margin-top:12px"><summary class="muted">Paste Carfax text (if your PDF is scanned)</summary>
@@ -234,6 +240,45 @@
       recalcTotals();
     }
 
+    async function ocrLocal(){
+      const file = document.getElementById('carfax').files[0];
+      if (!file) return alert('Choose a PDF or image first');
+      const isPdf = /pdf$/i.test(file.type) || /\.pdf$/i.test(file.name);
+      try {
+        document.getElementById('carfaxSummaryBox').innerHTML = '<div class="muted">OCR in progress… this can take a minute.</div>';
+        let text = '';
+        if (!isPdf) {
+          // Image → OCR
+          const imgURL = URL.createObjectURL(file);
+          const { data: { text: ocrText } } = await Tesseract.recognize(imgURL, 'eng', { logger: m => {} });
+          text = ocrText;
+          URL.revokeObjectURL(imgURL);
+        } else {
+          // PDF → render pages via pdf.js then OCR each page
+          const arrayBuf = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
+          const maxPages = Math.min(pdf.numPages, 5); // first 5 pages for speed
+          for (let p = 1; p <= maxPages; p++) {
+            const page = await pdf.getPage(p);
+            const viewport = page.getViewport({ scale: 1.5 });
+            const canvas = document.createElement('canvas');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext('2d');
+            await page.render({ canvasContext: ctx, viewport }).promise;
+            const { data: { text: otext } } = await Tesseract.recognize(canvas, 'eng', { logger: m => {} });
+            text += '\\n\\n' + otext;
+          }
+        }
+        if (!text.trim()) { document.getElementById('carfaxSummaryBox').innerHTML = '<div class="muted">OCR returned no text.</div>'; return; }
+        const res = await fetch('/api/carfax/summarize-text', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rawText: text }) }).then(r=>r.json());
+        if (res.ok) { carfaxSummary = res.summary; document.getElementById('carfaxSummaryBox').innerHTML = carfaxBox(carfaxSummary); }
+        else { document.getElementById('carfaxSummaryBox').innerHTML = '<div class="muted">Failed to summarize OCR text.</div>'; }
+      } catch (e) {
+        console.error(e);
+        document.getElementById('carfaxSummaryBox').innerHTML = '<div class="muted">OCR failed.</div>';
+      }
+    }
     async function uploadCarfax() {
       const file = document.getElementById('carfax').files[0];
       if (!file) return alert('Choose a PDF first');
@@ -259,7 +304,7 @@
         const val = Array.isArray(v) ? v.join(', ') : String(v);
         return `<div class="stat"><span><strong>${k}</strong></span><span>${val}</span></div>`;
       }).join('');
-      return `<div class="card" style="margin-top:8px"><h4>Carfax Summary</h4>${html}</div>`;
+      return `<div class=\"card\" style=\"margin-top:8px\"><div class=\"section-title\">CARFAX</div><h3 style=\"margin-top:6px\">Summary</h3>${html}</div>`;
     }
 
     function formatMoney(n){ return '$' + (Number(n||0)).toLocaleString(); }
