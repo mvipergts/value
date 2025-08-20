@@ -25,7 +25,8 @@
   <div class="card">
     <label>VIN</label>
     <div class="row">
-      <input id="vin" placeholder="e.g., 1G1ZE5ST0GF253821" style="flex:1;"/>
+      <input id="vin" placeholder="e.g., 1G1ZE5ST0GF253821" style="flex:2;"/>
+      <input id="mileage" type="number" min="0" step="1" placeholder="Current mileage" style="flex:1;" />
       <button onclick="lookup()">Lookup</button>
     </div>
     <div id="decodedBanner" class="muted" style="margin-top:6px"></div>
@@ -98,7 +99,7 @@
     function vehicleBanner(d){
       const y = d?.year || '—', make = d?.make || '—', model = d?.model || '—', trim = d?.trim || '';
       const label = [y, make, model, trim].filter(Boolean).join(' ');
-      return `<div class="card" style="padding:8px; background:#fafafa"><strong>${label}</strong>${d?.bodyClass ? ` · ${d.bodyClass}` : ''}</div>`;
+      const miles = document.getElementById('mileage')?.value || '';return `<div class="card" style="padding:8px; background:#fafafa"><strong>${label}</strong>${d?.bodyClass ? ` · ${d.bodyClass}` : ''}${miles?` · ${Number(miles).toLocaleString()} mi`:''}</div>`;
     }
     function valueBox(v){
       const w = (v && v.wholesale!==undefined) ? money(v.wholesale) : '—';
@@ -173,7 +174,9 @@
       }
 
       // 2) Load value/history/maintenance
-      const v = await fetch(`/api/value/${vin}`).then(r=>r.json());
+      const miles = Number(document.getElementById('mileage').value || 0);
+      const yr = (decoded && decoded.ok) ? Number(decoded.year||0) : 0;
+      const v = await fetch(`/api/value/${vin}?mileage=${encodeURIComponent(miles)}&year=${encodeURIComponent(yr)}`).then(r=>r.json());
       const h = await fetch(`/api/history/${vin}`).then(r=>r.json());
       const m = await fetch(`/api/maintenance/${vin}`).then(r=>r.json());
       valuation = v; history = h; maintenance = m;
@@ -291,7 +294,7 @@
       const notes = document.getElementById('notes').value.trim();
       const reconItems = document.getElementById('recon').value.split(',').map(s=>s.trim()).filter(Boolean);
       const hiddenMaintenanceCost = Number(document.getElementById('hiddenMaint').value || 0);
-      const body = { vin, vehicle, valuation, history, maintenance, commonIssues, notes, reconItems, carfaxUrl, carfaxSummary, hiddenMaintenanceCost, additionalCosts: costItems };
+      const body = { vin, mileage: Number(document.getElementById('mileage').value||0), vehicle, valuation, history, maintenance, commonIssues, notes, reconItems, carfaxUrl, carfaxSummary, hiddenMaintenanceCost, additionalCosts: costItems };
       const res = await fetch('/api/appraisals', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
       alert(res.ok ? 'Saved!' : 'Failed to save');
     }
@@ -305,7 +308,7 @@
       const res = await fetch('/api/report', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ vin, vehicle, valuation, history, maintenance, commonIssues, notes, reconItems, carfaxUrl, carfaxSummary, hiddenMaintenanceCost: Number(document.getElementById('hiddenMaint').value||0), additionalCosts: costItems, dealer: { name: 'OpenSource Autos', address: '4801 Lamar Ave, Mission, KS 66202', phone: '(816) 807-8577', site: 'opensourceautos.com' } })
+        body: JSON.stringify({ vin, mileage: Number(document.getElementById('mileage').value||0), vehicle, valuation, history, maintenance, commonIssues, notes, reconItems, carfaxUrl, carfaxSummary, hiddenMaintenanceCost: Number(document.getElementById('hiddenMaint').value||0), additionalCosts: costItems, dealer: { name: 'OpenSource Autos', address: '4801 Lamar Ave, Mission, KS 66202', phone: '(816) 807-8577', site: 'opensourceautos.com' } })
       }).then(r=>r.json());
       if (res.url) window.open(res.url, '_blank'); else alert('Failed to generate PDF');
     }

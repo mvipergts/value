@@ -97,9 +97,62 @@ const COST_MAP = {
 };
 
 // ---------- STUB endpoints ----------
+
 app.get('/api/value/:vin', async (req, res) => {
-  const estimate = 12500;
-  res.json({ vin: req.params.vin, estimate, wholesale: Math.round(estimate*0.90), retail: Math.round(estimate*1.15), currency: 'USD', source: 'stub' });
+  try {
+    const vin = req.params.vin;
+    const mileage = Number(req.query.mileage || 0);
+    const year = Number(req.query.year || 0);
+
+    // Baseline value (placeholder). You can swap with real guide later.
+    const base = 12500;
+
+    // Compute mileage adjustment vs. expected mileage by age
+    const nowYear = new Date().getFullYear();
+    const age = (year && year > 1900 && year <= nowYear) ? (nowYear - year) : 0;
+    const expected = age * 12000; // 12k mi/year baseline
+    const delta = (mileage && expected) ? (mileage - expected) : 0;
+
+    // Per-mile adjustments (USD). Tune as needed.
+    const perMileRetail = 0.08;     // 8¢ per mile over/under expected
+    const perMileWholesale = 0.06;  // 6¢ per mile over/under expected
+
+    let retailAdj = -(delta * perMileRetail);
+    let wholesaleAdj = -(delta * perMileWholesale);
+
+    // Clamp adjustments to avoid extremes
+    retailAdj = Math.max(-5000, Math.min(5000, retailAdj));
+    wholesaleAdj = Math.max(-5000, Math.min(5000, wholesaleAdj));
+
+    const wholesale = Math.round((base * 0.90) + wholesaleAdj);
+    const retail = Math.round((base * 1.15) + retailAdj);
+
+    res.json({
+      vin,
+      mileage,
+      year,
+      estimate: base,
+      wholesale,
+      retail,
+      currency: 'USD',
+      method: 'baseline+mi_adjust',
+      details: {
+        base,
+        age,
+        expectedMileage: expected,
+        deltaMileage: delta,
+        perMileRetail,
+        perMileWholesale,
+        retailAdj,
+        wholesaleAdj
+      }
+    });
+  } catch (e) {
+    console.error('value error', e);
+    res.json({ vin: req.params.vin, estimate: 12500, wholesale: 11250, retail: 14375, currency: 'USD', source: 'stub', error: 'calc_failed' });
+  }
+});
+
 });
 
 app.get('/api/history/:vin', async (req, res) => {
@@ -307,6 +360,8 @@ app.get('/api/appraisals', (req, res) => {
 // PDF
 const reportsDir = path.join(__dirname, 'reports');
 if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
+app.use('/reports', express.static(reportsDir));
+
 app.post('/api/report', (req, res) => {
   const { vin, vehicle, valuation, history, maintenance, commonIssues, notes, reconItems, carfaxUrl, carfaxSummary, dealer, hiddenMaintenanceCost, additionalCosts } = req.body;
   const filePath = path.join(reportsDir, `${vin || 'report'}_${Date.now()}.pdf`);
@@ -321,6 +376,7 @@ app.post('/api/report', (req, res) => {
   doc.moveDown();
 
   doc.moveDown().fontSize(14).text(`VIN: ${vin || 'N/A'}`);
+  if (req.body && typeof req.body.mileage !== 'undefined') doc.text(`Current mileage: ${Number(req.body.mileage||0).toLocaleString()} mi`);
   if (vehicle) doc.text(`Vehicle: ${vehicle}`);
 
   doc.moveDown().fontSize(12).text('Valuation', { underline: true });
