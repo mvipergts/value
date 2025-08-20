@@ -496,7 +496,6 @@ app.post('/api/report', (req, res) => {
   doc.end();
   stream.on('finish', () => res.json({ ok:true, path:filePath, url:`/reports/${path.basename(filePath)}` }));
 });
-});
 
 // ---------- Misc ----------
 app.get('/healthz', (_, res) => res.json({ ok:true }));
