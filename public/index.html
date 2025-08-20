@@ -1,4 +1,3 @@
-\
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -99,7 +98,8 @@
     function vehicleBanner(d){
       const y = d?.year || '—', make = d?.make || '—', model = d?.model || '—', trim = d?.trim || '';
       const label = [y, make, model, trim].filter(Boolean).join(' ');
-      const miles = document.getElementById('mileage')?.value || '';return `<div class="card" style="padding:8px; background:#fafafa"><strong>${label}</strong>${d?.bodyClass ? ` · ${d.bodyClass}` : ''}${miles?` · ${Number(miles).toLocaleString()} mi`:''}</div>`;
+      const miles = document.getElementById('mileage')?.value || '';
+      return `<div class="card" style="padding:8px; background:#fafafa"><strong>${label}</strong>${d?.bodyClass ? ` · ${d.bodyClass}` : ''}${miles?` · ${Number(miles).toLocaleString()} mi`:''}</div>`;
     }
     function valueBox(v){
       const w = (v && v.wholesale!==undefined) ? money(v.wholesale) : '—';
@@ -184,7 +184,7 @@
       recalcTotals();
     }
 
-        async function uploadCarfax() {
+    async function uploadCarfax() {
       const file = document.getElementById('carfax').files[0];
       if (!file) return alert('Choose a PDF first');
       const fd = new FormData();
