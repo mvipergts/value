@@ -246,3 +246,118 @@ app.post('/api/report', (req, res) => {
 app.get('/healthz', (_, res) => res.json({ ok:true }));
 
 app.listen(PORT, () => console.log(`Server running at http://0.0.0.0:${PORT}`));
+
+// ---------- Customer PDF (clean, branded, with maintenance deduction breakdown) ----------
+app.post('/api/report/customer', (req, res) => {
+  const { vin, vehicle='', valuation={}, adjustedWholesale=null, deduction=0, gapItems=[], carfaxSummary={}, carfaxUrl='', mileage=0 } = req.body || {};
+  const filePath = path.join(reportsDir, `${vin || 'customer'}_${Date.now()}.pdf`);
+  const doc = new PDFDocument({ margin: 40, size: 'LETTER' });
+  const stream = fs.createWriteStream(filePath);
+  doc.pipe(stream);
+
+  // Palette
+  const brand = 'Used Car Project';
+  const cPrimary = '#2563EB';  // blue
+  const cGreen   = '#10B981';  // emerald
+  const cAmber   = '#F59E0B';  // amber
+  const cIndigo  = '#6366F1';  // indigo
+  const cText    = '#0F172A';
+  const cMuted   = '#475569';
+  const cRule    = '#E2E8F0';
+
+  // Header bar
+  doc.rect(40, 40, 532, 46).fill(cPrimary);
+  doc.fillColor('#FFFFFF').fontSize(16).text('Vehicle Appraisal (Customer Copy)', 50, 52, { width: 400 });
+  doc.fontSize(10).text(new Date().toLocaleString(), 50, 72);
+  doc.fillColor('#FFFFFF').fontSize(10).text(brand, 522, 52, { width: 40, align: 'right' });
+  doc.fillColor(cText);
+
+  // Vehicle banner
+  const bannerY = 100;
+  doc.roundedRect(40, bannerY, 532, 68, 8).strokeColor(cRule).lineWidth(1).stroke();
+  doc.fillColor(cText).fontSize(14).text(vehicle || 'Vehicle', 50, bannerY + 12, { width: 400 });
+  doc.fillColor(cMuted).fontSize(10).text(`VIN: ${vin || '—'}`, 50, bannerY + 36, { width: 260 });
+  if (mileage) doc.text(`Mileage: ${Number(mileage||0).toLocaleString()} mi`, 310, bannerY + 36, { width: 262, align: 'right' });
+  doc.fillColor(cText);
+
+  // Valuation cards (left column)
+  let y = bannerY + 84;
+  const colW = 260;
+
+  // Card helper
+  function card(x, y, w, h, title, accent) {
+    doc.roundedRect(x, y, w, h, 10).fillAndStroke(accent, cRule);
+    doc.fillColor('#FFFFFF').fontSize(11).text(title, x + 12, y + 10);
+    doc.fillColor(cText);
+    doc.roundedRect(x, y + 28, w, h - 28, 10).fill('#FFFFFF').strokeColor(cRule).stroke();
+  }
+
+  // Value card
+  const wWholesale = valuation?.wholesale != null ? `$${Number(valuation.wholesale).toLocaleString()}` : '—';
+  const wRetail = valuation?.retail != null ? `$${Number(valuation.retail).toLocaleString()}` : '—';
+  const adj = (adjustedWholesale != null) ? `$${Number(adjustedWholesale).toLocaleString()}` : '—';
+  const ded = deduction ? `$${Number(deduction).toLocaleString()}` : '$0';
+
+  card(40, y, colW, 150, 'Valuation', cGreen);
+  doc.fontSize(11).fillColor(cText);
+  const leftX = 40 + 14, leftW = colW - 28;
+  const line = (k, v) => { doc.font('Helvetica-Bold').text(k, leftX, doc.y + 6, { continued: true, width: leftW/2 }); doc.font('Helvetica').text(v, leftX + leftW/2, doc.y - 14, { align: 'right', width: leftW/2 }); };
+  doc.moveDown(1.2);
+  line('Retail', wRetail);
+  line('Wholesale', wWholesale);
+  line('Maint. deduction', `-${ded}`);
+  line('Wholesale (after gaps)', adj);
+
+  // Carfax at a glance (right column)
+  card(312, y, colW, 150, 'Carfax at a glance', cIndigo);
+  doc.fontSize(11).fillColor(cText);
+  const rightX = 312 + 14, rightW = colW - 28;
+  const cf = carfaxSummary || {};
+  const cfRows = [
+    ['Accidents', cf.accidents ?? '—'],
+    ['Owners', cf.owners ?? '—'],
+    ['Service records', cf.serviceRecords ?? '—'],
+    ['Usage', cf.usage || '—']
+  ];
+  doc.text(' ', 312, y + 34); // move into body
+  cfRows.forEach(([k,v]) => { doc.font('Helvetica-Bold').text(k, rightX, doc.y + 6, { continued:true, width:rightW/2 }); doc.font('Helvetica').text(String(v), rightX + rightW/2, doc.y - 14, { align:'right', width:rightW/2 }); });
+
+  y += 170;
+
+  // Maintenance deductions breakdown
+  const tableH = 160;
+  card(40, y, 532, tableH, 'Maintenance Deductions (Reasonable Estimates)', cAmber);
+  doc.text(' ', 40, y + 34);
+  const headerY = doc.y;
+  doc.fontSize(10).fillColor(cMuted).text('Item', 54, headerY, { width: 200 });
+  doc.text('Amount', 340, headerY, { width: 80, align: 'right' });
+  doc.text('Why', 430, headerY, { width: 130 });
+  doc.moveTo(50, headerY + 14).lineTo(560, headerY + 14).strokeColor(cRule).lineWidth(1).stroke();
+  doc.fillColor(cText);
+  let rowY = headerY + 18;
+  const rows = Array.isArray(gapItems) ? gapItems : [];
+  if (rows.length === 0) {
+    doc.text('No deductions applied.', 54, rowY);
+  } else {
+    rows.forEach((it, i) => {
+      const bg = (i % 2 === 0) ? '#F8FAFC' : '#FFFFFF';
+      doc.rect(44, rowY - 4, 520, 18).fill(bg);
+      doc.fillColor(cText).text(it.label || '', 54, rowY, { width: 200 });
+      doc.text(`$${Number(it.amount||0).toLocaleString()}`, 340, rowY, { width: 80, align:'right' });
+      doc.fillColor(cMuted).text(it.rationale || '', 430, rowY, { width: 130 });
+      rowY += 20;
+    });
+  }
+  doc.fillColor(cText);
+  doc.moveTo(50, rowY + 4).lineTo(560, rowY + 4).strokeColor(cRule).stroke();
+  doc.font('Helvetica-Bold').text('Total deduction', 54, rowY + 8, { width: 200 });
+  doc.font('Helvetica').text(ded, 340, rowY + 8, { width: 80, align:'right' });
+
+  // Footer link + disclaimer
+  doc.fillColor(cMuted).fontSize(9);
+  if (carfaxUrl) doc.text(`Carfax: ${carfaxUrl}`, 40, 740, { link: carfaxUrl, underline: true });
+  doc.text('Estimates are for guidance only and not an official offer. Values depend on inspection/condition.', 40, 752);
+
+  doc.end();
+  stream.on('finish', () => res.json({ ok:true, url:`/reports/${path.basename(filePath)}` }));
+});

@@ -5,9 +5,75 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Car Value, History & Maintenance Tool</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-  <script>pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";</script>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js">
+  async function printCustomerPDF(){
+    const vin = document.getElementById('vin').value.trim();
+    if (!vin) return alert('Enter a VIN first');
+    const miles = Number(document.getElementById('mileage').value||0);
+    // Build a vehicle label from decoded banner if possible
+    let vehicle = '';
+    try { const b = document.getElementById('decodedBanner').innerText.trim(); if (b) vehicle = b.replace(/\s+/g, ' '); } catch {}
+    const body = {
+      vin, vehicle, mileage: miles,
+      valuation: valuation || {},
+      adjustedWholesale: (typeof adjustedWholesale === 'number') ? adjustedWholesale : null,
+      deduction: Array.isArray(gapItems)? gapItems.reduce((s,it)=>s+Number(it.amount||0),0) : 0,
+      gapItems: gapItems || [],
+      carfaxSummary: carfaxSummary || {},
+      carfaxUrl: carfaxUrl || ''
+    };
+    const res = await fetch('/api/report/customer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
+    if (res && res.url) window.open(res.url, '_blank');
+    else alert('Could not generate PDF');
+  }
+
+</script>
+  <script>pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+  async function printCustomerPDF(){
+    const vin = document.getElementById('vin').value.trim();
+    if (!vin) return alert('Enter a VIN first');
+    const miles = Number(document.getElementById('mileage').value||0);
+    // Build a vehicle label from decoded banner if possible
+    let vehicle = '';
+    try { const b = document.getElementById('decodedBanner').innerText.trim(); if (b) vehicle = b.replace(/\s+/g, ' '); } catch {}
+    const body = {
+      vin, vehicle, mileage: miles,
+      valuation: valuation || {},
+      adjustedWholesale: (typeof adjustedWholesale === 'number') ? adjustedWholesale : null,
+      deduction: Array.isArray(gapItems)? gapItems.reduce((s,it)=>s+Number(it.amount||0),0) : 0,
+      gapItems: gapItems || [],
+      carfaxSummary: carfaxSummary || {},
+      carfaxUrl: carfaxUrl || ''
+    };
+    const res = await fetch('/api/report/customer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
+    if (res && res.url) window.open(res.url, '_blank');
+    else alert('Could not generate PDF');
+  }
+
+</script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js">
+  async function printCustomerPDF(){
+    const vin = document.getElementById('vin').value.trim();
+    if (!vin) return alert('Enter a VIN first');
+    const miles = Number(document.getElementById('mileage').value||0);
+    // Build a vehicle label from decoded banner if possible
+    let vehicle = '';
+    try { const b = document.getElementById('decodedBanner').innerText.trim(); if (b) vehicle = b.replace(/\s+/g, ' '); } catch {}
+    const body = {
+      vin, vehicle, mileage: miles,
+      valuation: valuation || {},
+      adjustedWholesale: (typeof adjustedWholesale === 'number') ? adjustedWholesale : null,
+      deduction: Array.isArray(gapItems)? gapItems.reduce((s,it)=>s+Number(it.amount||0),0) : 0,
+      gapItems: gapItems || [],
+      carfaxSummary: carfaxSummary || {},
+      carfaxUrl: carfaxUrl || ''
+    };
+    const res = await fetch('/api/report/customer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
+    if (res && res.url) window.open(res.url, '_blank');
+    else alert('Could not generate PDF');
+  }
+
+</script>
   <style>
     :root[data-theme="light"]{ --bg:#f7fafc; --surface:#fff; --card:#fff; --text:#0f172a; --muted:#475569; --primary:#2563eb; --btn-text:#fff; --border:#d6e0ee; --accent:#e2e8f0; }
     :root[data-theme="dark"]{ --bg:#0c111c; --surface:#111827; --card:#111827; --text:#e9edf5; --muted:#b8c2d6; --primary:#2563eb; --btn-text:#fff; --border:#223047; --accent:#1e293b; }
@@ -214,6 +280,38 @@
         </table>
       </div>`;
     }
+
+  async function printCustomerPDF(){
+    const vin = document.getElementById('vin').value.trim();
+    if (!vin) return alert('Enter a VIN first');
+    const miles = Number(document.getElementById('mileage').value||0);
+    // Build a vehicle label from decoded banner if possible
+    let vehicle = '';
+    try { const b = document.getElementById('decodedBanner').innerText.trim(); if (b) vehicle = b.replace(/\s+/g, ' '); } catch {}
+    const body = {
+      vin, vehicle, mileage: miles,
+      valuation: valuation || {},
+      adjustedWholesale: (typeof adjustedWholesale === 'number') ? adjustedWholesale : null,
+      deduction: Array.isArray(gapItems)? gapItems.reduce((s,it)=>s+Number(it.amount||0),0) : 0,
+      gapItems: gapItems || [],
+      carfaxSummary: carfaxSummary || {},
+      carfaxUrl: carfaxUrl || ''
+    };
+    const res = await fetch('/api/report/customer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
+    if (res && res.url) window.open(res.url, '_blank');
+    else alert('Could not generate PDF');
+  }
+
 </script>
+
+  <div class="card" style="border-left: 4px solid #2563EB">
+    <h3>Reports</h3>
+    <p class="muted">Create a clean, customer-ready PDF with values and the maintenance deduction breakdown.</p>
+    <div style="display:flex; gap:12px; flex-wrap:wrap">
+      <button class="btn" onclick="printCustomerPDF()">Print Customer PDF</button>
+      <a href="/appraisals.html" target="_blank" class="btn secondary" style="text-decoration:none">Recent Appraisals</a>
+    </div>
+  </div>
+
 </body>
 </html>
