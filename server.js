@@ -27,14 +27,14 @@ const dataDir = path.join(__dirname, 'data');
 app.use('/uploads', express.static(uploadDir));
 app.use('/reports', express.static(reportsDir));
 
-// multer
+// multer storage
 const storage = multer.diskStorage({
   destination: (_, __, cb) => cb(null, uploadDir),
   filename: (_, file, cb) => cb(null, Date.now() + '_' + file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_'))
 });
 const upload = multer({ storage });
 
-// simple store
+// simple local store (if needed later)
 const storeFile = path.join(dataDir, 'appraisals.json');
 if (!fs.existsSync(storeFile)) fs.writeFileSync(storeFile, '[]');
 const readStore = () => JSON.parse(fs.readFileSync(storeFile, 'utf8'));
@@ -46,7 +46,7 @@ function safeText(resp) {
   return '';
 }
 
-// ---- Carfax summary (text only) ----
+// ---- Helpers ----
 function extractCarfaxSummary(text) {
   const t = (text || '').replace(/\r/g, '');
   const lower = t.toLowerCase();
@@ -201,9 +201,9 @@ app.post('/api/value/adjusted', async (req, res) => {
   } catch (e) { res.status(500).json({ ok:false, error:'adjust_failed' }); }
 });
 
-// ---- PDF report ----
+// ---- Basic PDF report (developer copy) ----
 app.post('/api/report', (req, res) => {
-  const { vin, vehicle, valuation, history, maintenance, carfaxUrl, carfaxSummary, hiddenMaintenanceCost, additionalCosts, mileage } = req.body;
+  const { vin, vehicle, valuation, history, maintenance, carfaxUrl, carfaxSummary, hiddenMaintenanceCost, additionalCosts, mileage } = req.body || {};
   const filePath = path.join(reportsDir, `${vin || 'report'}_${Date.now()}.pdf`);
   const doc = new PDFDocument({ margin: 40, size: 'LETTER' });
   const stream = fs.createWriteStream(filePath);
@@ -243,279 +243,16 @@ app.post('/api/report', (req, res) => {
   stream.on('finish', () => res.json({ ok:true, path:filePath, url:`/reports/${path.basename(filePath)}` }));
 });
 
-app.get('/healthz', (_, res) => res.json({ ok:true }));
-
-app.listen(PORT, () => console.log(`Server running at http://0.0.0.0:${PORT}`));
-
-
-  const stream = fs.createWriteStream(filePath);
-  doc.pipe(stream);
-
-  // Palette
-  const brand = 'Used Car Project';
-  const cPrimary = '#2563EB';  // blue
-  const cGreen   = '#10B981';  // emerald
-  const cAmber   = '#F59E0B';  // amber
-  const cIndigo  = '#6366F1';  // indigo
-  const cText    = '#0F172A';
-  const cMuted   = '#475569';
-  const cRule    = '#E2E8F0';
-
-  // Header bar
-  doc.rect(40, 40, 532, 46).fill(cPrimary);
-  doc.fillColor('#FFFFFF').fontSize(16).text('Vehicle Appraisal (Customer Copy)', 50, 52, { width: 400 });
-  doc.fontSize(10).text(new Date().toLocaleString(), 50, 72);
-  doc.fillColor('#FFFFFF').fontSize(10).text(brand, 522, 52, { width: 40, align: 'right' });
-  doc.fillColor(cText);
-
-  // Vehicle banner
-  const bannerY = 100;
-  doc.roundedRect(40, bannerY, 532, 68, 8).strokeColor(cRule).lineWidth(1).stroke();
-  doc.fillColor(cText).fontSize(14).text(vehicle || 'Vehicle', 50, bannerY + 12, { width: 400 });
-  doc.fillColor(cMuted).fontSize(10).text(`VIN: ${vin || '—'}`, 50, bannerY + 36, { width: 260 });
-  if (mileage) doc.text(`Mileage: ${Number(mileage||0).toLocaleString()} mi`, 310, bannerY + 36, { width: 262, align: 'right' });
-  doc.fillColor(cText);
-
-  // Valuation cards (left column)
-  let y = bannerY + 84;
-  const colW = 260;
-
-  // Card helper
-  function card(x, y, w, h, title, accent) {
-    doc.roundedRect(x, y, w, h, 10).fillAndStroke(accent, cRule);
-    doc.fillColor('#FFFFFF').fontSize(11).text(title, x + 12, y + 10);
-    doc.fillColor(cText);
-    doc.roundedRect(x, y + 28, w, h - 28, 10).fill('#FFFFFF').strokeColor(cRule).stroke();
-  }
-
-  // Value card
-  const wWholesale = valuation?.wholesale != null ? `$${Number(valuation.wholesale).toLocaleString()}` : '—';
-  const wRetail = valuation?.retail != null ? `$${Number(valuation.retail).toLocaleString()}` : '—';
-  const adj = (adjustedWholesale != null) ? `$${Number(adjustedWholesale).toLocaleString()}` : '—';
-  const ded = deduction ? `$${Number(deduction).toLocaleString()}` : '$0';
-
-  card(40, y, colW, 150, 'Valuation', cGreen);
-  doc.fontSize(11).fillColor(cText);
-  const leftX = 40 + 14, leftW = colW - 28;
-  const line = (k, v) => { doc.font('Helvetica-Bold').text(k, leftX, doc.y + 6, { continued: true, width: leftW/2 }); doc.font('Helvetica').text(v, leftX + leftW/2, doc.y - 14, { align: 'right', width: leftW/2 }); };
-  doc.moveDown(1.2);
-  line('Retail', wRetail);
-  line('Wholesale', wWholesale);
-  line('Maint. deduction', `-${ded}`);
-  line('Wholesale (after gaps)', adj);
-
-  // Carfax at a glance (right column)
-  card(312, y, colW, 150, 'Carfax at a glance', cIndigo);
-  doc.fontSize(11).fillColor(cText);
-  const rightX = 312 + 14, rightW = colW - 28;
-  const cf = carfaxSummary || {};
-  const cfRows = [
-    ['Accidents', cf.accidents ?? '—'],
-    ['Owners', cf.owners ?? '—'],
-    ['Service records', cf.serviceRecords ?? '—'],
-    ['Usage', cf.usage || '—']
-  ];
-  doc.text(' ', 312, y + 34); // move into body
-  cfRows.forEach(([k,v]) => { doc.font('Helvetica-Bold').text(k, rightX, doc.y + 6, { continued:true, width:rightW/2 }); doc.font('Helvetica').text(String(v), rightX + rightW/2, doc.y - 14, { align:'right', width:rightW/2 }); });
-
-  y += 170;
-
-  // Maintenance deductions breakdown
-  const tableH = 160;
-  card(40, y, 532, tableH, 'Maintenance Deductions (Reasonable Estimates)', cAmber);
-  doc.text(' ', 40, y + 34);
-  const headerY = doc.y;
-  doc.fontSize(10).fillColor(cMuted).text('Item', 54, headerY, { width: 200 });
-  doc.text('Amount', 340, headerY, { width: 80, align: 'right' });
-  doc.text('Why', 430, headerY, { width: 130 });
-  doc.moveTo(50, headerY + 14).lineTo(560, headerY + 14).strokeColor(cRule).lineWidth(1).stroke();
-  doc.fillColor(cText);
-  let rowY = headerY + 18;
-  const rows = Array.isArray(gapItems) ? gapItems : [];
-  if (rows.length === 0) {
-    doc.text('No deductions applied.', 54, rowY);
-  } else {
-    rows.forEach((it, i) => {
-      const bg = (i % 2 === 0) ? '#F8FAFC' : '#FFFFFF';
-      doc.rect(44, rowY - 4, 520, 18).fill(bg);
-      doc.fillColor(cText).text(it.label || '', 54, rowY, { width: 200 });
-      doc.text(`$${Number(it.amount||0).toLocaleString()}`, 340, rowY, { width: 80, align:'right' });
-      doc.fillColor(cMuted).text(it.rationale || '', 430, rowY, { width: 130 });
-      rowY += 20;
-    });
-  }
-  doc.fillColor(cText);
-  doc.moveTo(50, rowY + 4).lineTo(560, rowY + 4).strokeColor(cRule).stroke();
-  doc.font('Helvetica-Bold').text('Total deduction', 54, rowY + 8, { width: 200 });
-  doc.font('Helvetica').text(ded, 340, rowY + 8, { width: 80, align:'right' });
-
-  // Footer link + disclaimer
-  doc.fillColor(cMuted).fontSize(9);
-  if (carfaxUrl) doc.text(`Carfax: ${carfaxUrl}`, 40, 740, { link: carfaxUrl, underline: true });
-  doc.text('Estimates are for guidance only and not an official offer. Values depend on inspection/condition.', 40, 752);
-
-  doc.end();
-  stream.on('finish', () => res.json({ ok:true, url:`/reports/${path.basename(filePath)}` }));
-});
-
-// ---------- Common issues (AI-backed; falls back to mock) ----------
-    const text = safeText(resp) || '{"issues":[]}';
-    const data = JSON.parse(text);
-    return res.json({ ok:true, ...data });
-  } catch (e) {
-    console.error('common-issues error', e);
-    res.status(500).json({ ok:false, error:'common_issues_failed' });
-  }
-});
-
-// ---------- Customer PDF (clean, branded, with maintenance deduction breakdown) ----------
-app.post('/api/report/customer', (req, res) => {
-  const { vin, vehicle='', valuation={}, adjustedWholesale=null, deduction=0, gapItems=[], carfaxSummary={}, carfaxUrl='', mileage=0, additionalCosts=[] } = req.body || {};
-  const filePath = path.join(reportsDir, `${vin || 'customer'}_${Date.now()}.pdf`);
-  const doc = new PDFDocument({ margin: 40, size: 'LETTER' });
-  const stream = fs.createWriteStream(filePath);
-  doc.pipe(stream);
-
-  // Palette
-  const brand = 'Used Car Project';
-  const cPrimary = '#2563EB';  // blue
-  const cGreen   = '#10B981';  // emerald
-  const cAmber   = '#F59E0B';  // amber
-  const cIndigo  = '#6366F1';  // indigo
-  const cText    = '#0F172A';
-  const cMuted   = '#475569';
-  const cRule    = '#E2E8F0';
-
-  // Header bar
-  doc.rect(40, 40, 532, 46).fill(cPrimary);
-  doc.fillColor('#FFFFFF').fontSize(16).text('Vehicle Appraisal (Customer Copy)', 50, 52, { width: 400 });
-  doc.fontSize(10).text(new Date().toLocaleString(), 50, 72);
-  doc.fillColor('#FFFFFF').fontSize(10).text(brand, 522, 52, { width: 40, align: 'right' });
-  doc.fillColor(cText);
-
-  // Vehicle banner
-  const bannerY = 100;
-  doc.roundedRect(40, bannerY, 532, 68, 8).strokeColor(cRule).lineWidth(1).stroke();
-  doc.fillColor(cText).fontSize(14).text(vehicle || 'Vehicle', 50, bannerY + 12, { width: 400 });
-  doc.fillColor(cMuted).fontSize(10).text(`VIN: ${vin || '—'}`, 50, bannerY + 36, { width: 260 });
-  if (mileage) doc.text(`Mileage: ${Number(mileage||0).toLocaleString()} mi`, 310, bannerY + 36, { width: 262, align: 'right' });
-  doc.fillColor(cText);
-
-  // Values
-  let y = bannerY + 84;
-  const colW = 260;
-  function card(x, y, w, h, title, accent) {
-    doc.roundedRect(x, y, w, h, 10).fillAndStroke(accent, cRule);
-    doc.fillColor('#FFFFFF').fontSize(11).text(title, x + 12, y + 10);
-    doc.fillColor(cText);
-    doc.roundedRect(x, y + 28, w, h - 28, 10).fill('#FFFFFF').strokeColor(cRule).stroke();
-  }
-  const wWholesale = valuation?.wholesale != null ? `$${Number(valuation.wholesale).toLocaleString()}` : '—';
-  const wRetail = valuation?.retail != null ? `$${Number(valuation.retail).toLocaleString()}` : '—';
-  const adj = (adjustedWholesale != null) ? `$${Number(adjustedWholesale).toLocaleString()}` : '—';
-  const ded = deduction ? `$${Number(deduction).toLocaleString()}` : '$0';
-
-  card(40, y, colW, 170, 'Valuation', cGreen);
-  doc.fontSize(11).fillColor(cText);
-  const LX = 40 + 14, LW = colW - 28;
-  const line = (k, v) => { doc.font('Helvetica-Bold').text(k, LX, doc.y + 6, { continued: true, width: LW/2 }); doc.font('Helvetica').text(v, LX + LW/2, doc.y - 14, { align: 'right', width: LW/2 }); };
-  doc.moveDown(1.2);
-  line('Retail', wRetail);
-  line('Wholesale', wWholesale);
-  line('Maint. deduction', `-${ded}`);
-  line('Wholesale (after gaps)', adj);
-
-  // Recon card
-  const reconTotal = (Array.isArray(additionalCosts) ? additionalCosts.reduce((s,it)=>s+Number(it.amount||0),0) : 0);
-  const targetBuy = (adjustedWholesale != null) ? Math.max(0, Number(adjustedWholesale) - reconTotal) : null;
-  card(312, y, colW, 170, 'Reconditioning Costs', cIndigo);
-  doc.fontSize(11).fillColor(cText);
-  const RX = 312 + 14, RW = colW - 28;
-  doc.text(' ', 312, y + 34);
-  line('Reconditioning total', `$${reconTotal.toLocaleString()}`);
-  line('Target purchase price', targetBuy != null ? `$${Number(targetBuy).toLocaleString()}` : '—');
-
-  y += 190;
-
-  // Maintenance deductions breakdown
-  const tableH = 160;
-  card(40, y, 532, tableH, 'Maintenance Deductions (Reasonable Estimates)', cAmber);
-  doc.text(' ', 40, y + 34);
-  const headerY = doc.y;
-  doc.fontSize(10).fillColor(cMuted).text('Item', 54, headerY, { width: 200 });
-  doc.text('Amount', 340, headerY, { width: 80, align: 'right' });
-  doc.text('Why', 430, headerY, { width: 130 });
-  doc.moveTo(50, headerY + 14).lineTo(560, headerY + 14).strokeColor(cRule).lineWidth(1).stroke();
-  doc.fillColor(cText);
-  let rowY = headerY + 18;
-  const rows = Array.isArray(gapItems) ? gapItems : [];
-  if (rows.length === 0) {
-    doc.text('No deductions applied.', 54, rowY);
-  } else {
-    rows.forEach((it, i) => {
-      const bg = (i % 2 === 0) ? '#F8FAFC' : '#FFFFFF';
-      doc.rect(44, rowY - 4, 520, 18).fill(bg);
-      doc.fillColor(cText).text(it.label || '', 54, rowY, { width: 200 });
-      doc.text(`$${Number(it.amount||0).toLocaleString()}`, 340, rowY, { width: 80, align:'right' });
-      doc.fillColor(cMuted).text(it.rationale || '', 430, rowY, { width: 130 });
-      rowY += 20;
-    });
-  }
-  doc.fillColor(cText);
-  doc.moveTo(50, rowY + 4).lineTo(560, rowY + 4).strokeColor(cRule).stroke();
-  doc.font('Helvetica-Bold').text('Total deduction', 54, rowY + 8, { width: 200 });
-  doc.font('Helvetica').text(ded, 340, rowY + 8, { width: 80, align:'right' });
-
-
-  // Evidence summary (if provided through body.evidence)
-  try {
-    const ev = req.body && req.body.evidence ? req.body.evidence : null;
-    if (ev) {
-      let y2 = rowY + 38;
-      if (y2 < 540) y2 = 540;
-      // Evidence card
-      function card(x, y, w, h, title, accent) {
-        doc.roundedRect(x, y, w, h, 10).fillAndStroke(accent, cRule);
-        doc.fillColor('#FFFFFF').fontSize(11).text(title, x + 12, y + 10);
-        doc.fillColor(cText);
-        doc.roundedRect(x, y + 28, w, h - 28, 10).fill('#FFFFFF').strokeColor(cRule).stroke();
-      }
-      const cardH = 130;
-      card(40, y2, 532, cardH, 'Evidence Summary', cPrimary);
-      doc.text(' ', 40, y2 + 34);
-      const yy = doc.y;
-      doc.fontSize(10).fillColor(cText).text(`NHTSA Recalls: ${ev.counts?.recalls ?? 0}`, 54, yy);
-      doc.text(`Complaints: ${ev.counts?.complaints ?? 0}`, 200, yy);
-      doc.text(`TSBs: ${ev.counts?.tsbs ?? 0}`, 340, yy);
-      doc.moveTo(50, yy + 14).lineTo(560, yy + 14).strokeColor(cRule).lineWidth(1).stroke();
-      const risks = Array.isArray(ev.topRisks)?ev.topRisks.slice(0,4):[];
-      let ry = yy + 20;
-      risks.forEach(r => { doc.text(`• ${r.label} — score ${r.score} (${r.rationale})`, 54, ry, { width: 500 }); ry += 14; });
-    }
-  } catch(e){}
-
-  // Footer
-  doc.fillColor(cMuted).fontSize(9);
-
-  if (carfaxUrl) doc.text(`Carfax: ${carfaxUrl}`, 40, 740, { link: carfaxUrl, underline: true });
-  doc.text('Estimates are for guidance only and not an official offer. Values depend on inspection/condition.', 40, 752);
-
-  doc.end();
-  stream.on('finish', () => res.json({ ok:true, url:`/reports/${path.basename(filePath)}` }));
-});
-
 // ---------- Common issues (NHTSA + optional web search; NO OpenAI required) ----------
 app.post('/api/maintenance/common-issues', async (req, res) => {
   try {
     const { vin='', vehicle='' } = req.body || {};
-    // Try to parse "2015 HONDA Accord ..." from vehicle banner
     let year = null, make = null, model = null;
     try {
       const parts = (vehicle||'').split(/\s+/);
       const y = parseInt(parts[0], 10);
       if (!isNaN(y)) { year = y; make = parts[1] || null; model = parts[2] || null; }
     } catch {}
-    // If not parsed, decode VIN to get make/model/year
     if ((!year || !make || !model) && vin){
       try {
         const r = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`);
@@ -527,24 +264,20 @@ app.post('/api/maintenance/common-issues', async (req, res) => {
       } catch {}
     }
 
-    // Helper to fetch safely
     async function getJSON(url){
-      try { const r = await fetch(url, { timeout: 12000 }); return await r.json(); }
+      try { const r = await fetch(url); return await r.json(); }
       catch(e){ return null; }
     }
 
-    // NHTSA: Recalls + Complaints (ODI)
     let recalls = [];
     let complaints = [];
     if (make && model && year){
       const rec = await getJSON(`https://api.nhtsa.gov/recalls/recallsByVehicle?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&modelYear=${encodeURIComponent(year)}`);
       if (rec && rec.results) recalls = rec.results;
-
       const cmp = await getJSON(`https://api.nhtsa.gov/Complaints/ByVehicle?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&modelYear=${encodeURIComponent(year)}`);
       if (cmp && cmp.results) complaints = cmp.results;
     }
 
-    // Heuristic keyword bucketing from complaint component/summary
     const buckets = [
       { key:'engine', label:'Engine / Oil consumption' },
       { key:'trans', label:'Transmission' },
@@ -572,7 +305,6 @@ app.post('/api/maintenance/common-issues', async (req, res) => {
     if (!issues.length && complaints.length) noteParts.push(`${complaints.length} complaints found (varied components)`);
     const note = noteParts.join(' · ') || 'Data from NHTSA ODI (public).';
 
-    // Optional: Web search (SERPAPI)
     const SERP_API_KEY = process.env.SERP_API_KEY || '';
     if (SERP_API_KEY && make && model) {
       try {
@@ -593,20 +325,16 @@ app.post('/api/maintenance/common-issues', async (req, res) => {
   }
 });
 
-// ---------- Technical Service Bulletins (TSB) via DOT Socrata dataset (no key required) ----------
+// ---------- Technical Service Bulletins (TSB) via DOT Socrata dataset ----------
 app.post('/api/maintenance/tsb', async (req, res) => {
   try {
     const { vin='', vehicle='' } = req.body || {};
-
-    // Try to parse "2015 HONDA Accord ..." from vehicle banner
     let year = null, make = null, model = null;
     try {
       const parts = (vehicle||'').split(/\s+/);
       const y = parseInt(parts[0], 10);
       if (!isNaN(y)) { year = y; make = parts[1] || null; model = parts[2] || null; }
     } catch {}
-
-    // If not parsed, decode VIN to get make/model/year
     if ((!year || !make || !model) && vin){
       try {
         const r = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`);
@@ -619,7 +347,6 @@ app.post('/api/maintenance/tsb', async (req, res) => {
     }
     if (!year || !make || !model) return res.status(400).json({ ok:false, error:'need_year_make_model' });
 
-    // Query Socrata dataset (TSB summaries). Dataset ID: hczg-qbhf
     const baseUrl = 'https://data.transportation.gov/resource/hczg-qbhf.json';
     const url = `${baseUrl}?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&model_year=${encodeURIComponent(year)}&$limit=50`;
     const headers = { 'Accept': 'application/json' };
@@ -634,7 +361,6 @@ app.post('/api/maintenance/tsb', async (req, res) => {
       return res.status(502).json({ ok:false, error:'tsb_fetch_failed' });
     }
 
-    // Normalize fields
     const items = data.map(d => {
       const title = d.component || d.system_type || 'TSB';
       const tsbNum = d.bulletin_number || d.tsb_number || d.nhtsa_tsb_number || '';
@@ -649,12 +375,11 @@ app.post('/api/maintenance/tsb', async (req, res) => {
   }
 });
 
-// ---------- Evidence (NHTSA Recalls + Complaints + TSB) with risk scoring ----------
+// ---------- Evidence (recalls+complaints+TSB) with risk scoring ----------
 app.post('/api/evidence/score', async (req, res) => {
   try {
     const { vin='', vehicle='' } = req.body || {};
 
-    // Parse/derive Y/M/M
     let year = null, make = null, model = null;
     try {
       const parts = (vehicle||'').trim().split(/\s+/);
@@ -675,7 +400,6 @@ app.post('/api/evidence/score', async (req, res) => {
 
     async function getJSON(url){ try { const r = await fetch(url); return await r.json(); } catch { return null; } }
 
-    // Fetch NHTSA recalls + complaints
     let recalls = [];
     let complaints = [];
     const rec = await getJSON(`https://api.nhtsa.gov/recalls/recallsByVehicle?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&modelYear=${encodeURIComponent(year)}`);
@@ -683,7 +407,6 @@ app.post('/api/evidence/score', async (req, res) => {
     const cmp = await getJSON(`https://api.nhtsa.gov/Complaints/ByVehicle?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&modelYear=${encodeURIComponent(year)}`);
     if (cmp && cmp.results) complaints = cmp.results;
 
-    // Fetch TSBs via DOT Socrata
     const baseUrl = 'https://data.transportation.gov/resource/hczg-qbhf.json';
     let tsbs = [];
     try {
@@ -693,7 +416,6 @@ app.post('/api/evidence/score', async (req, res) => {
       const r = await fetch(url, { headers }); tsbs = await r.json(); if (!Array.isArray(tsbs)) tsbs = [];
     } catch { tsbs = []; }
 
-    // Buckets
     const buckets = [
       { key:'engine', label:'Engine / Oil consumption' },
       { key:'trans', label:'Transmission' },
@@ -707,9 +429,9 @@ app.post('/api/evidence/score', async (req, res) => {
       { key:'paint', label:'Paint / Exterior' },
     ];
     const lowerIncludes = (txt, needle) => (txt||'').toLowerCase().includes(needle);
-    const buckCounts = new Map(); // complaints
-    const buckTSB = new Map();    // has tsb mention
-    const buckRecall = new Map(); // has recall mention
+    const buckCounts = new Map();
+    const buckTSB = new Map();
+    const buckRecall = new Map();
 
     complaints.forEach(c => {
       const txt = `${c?.component || ''} ${c?.summary || ''} ${c?.narrative || ''}`.toLowerCase();
@@ -730,7 +452,7 @@ app.post('/api/evidence/score', async (req, res) => {
       const c = buckCounts.get(b.label)||0;
       const hasT = !!buckTSB.get(b.label);
       const hasR = !!buckRecall.get(b.label);
-      const score = (hasT?3:0) + (hasR?2:0) + Math.floor(c/10); // simple weighting
+      const score = (hasT?3:0) + (hasR?2:0) + Math.floor(c/10);
       const rationale = [
         hasT ? 'TSB present (+3)' : null,
         hasR ? 'Recall mention (+2)' : null,
@@ -739,10 +461,8 @@ app.post('/api/evidence/score', async (req, res) => {
       return { label: b.label, complaints: c, tsb: hasT, recall: hasR, score, rationale };
     }).filter(x => x.score > 0).sort((a,b)=>b.score-a.score).slice(0,5);
 
-    // Optional: web corroboration via SerpAPI allowlist
     const SERP_API_KEY = process.env.SERP_API_KEY || '';
-    const allow = ['nhtsa.gov','carcomplaints.com','repairpal.com','consumerreports.org','iihs.org','edmunds.com','kbb.com','cars.com','autorecalls']; // rough
-    let webSignals = [];
+    const allow = ['nhtsa.gov','carcomplaints.com','repairpal.com','consumerreports.org','iihs.org','edmunds.com','kbb.com','cars.com'];
     if (SERP_API_KEY) {
       try {
         const q = `${year} ${make} ${model} common problems`;
@@ -756,14 +476,12 @@ app.post('/api/evidence/score', async (req, res) => {
           if (snippets.includes(b.key)) {
             const idx = scored.findIndex(s => s.label === b.label);
             if (idx >= 0) { scored[idx].score += 1; scored[idx].rationale += ' · web corroboration (+1)'; }
-            else webSignals.push(b.label);
           }
         });
+        scored.sort((a,b)=>b.score-a.score);
       } catch {}
-      scored.sort((a,b)=>b.score-a.score);
     }
 
-    // Suggested recon items (non-binding hints)
     function suggestCosts(label){
       const out = [];
       const push = (lbl, amt, why) => out.push({ label: lbl, amount: amt, rationale: why, source: 'risk_map' });
@@ -791,3 +509,122 @@ app.post('/api/evidence/score', async (req, res) => {
     res.status(500).json({ ok:false, error:'evidence_failed' });
   }
 });
+
+// ---------- Customer PDF (branded, with deduction, recon, evidence) ----------
+app.post('/api/report/customer', (req, res) => {
+  const { vin, vehicle='', valuation={}, adjustedWholesale=null, deduction=0, gapItems=[], carfaxSummary={}, carfaxUrl='', mileage=0, additionalCosts=[], evidence=null } = req.body || {};
+  const filePath = path.join(reportsDir, `${vin || 'customer'}_${Date.now()}.pdf`);
+  const doc = new PDFDocument({ margin: 40, size: 'LETTER' });
+  const stream = fs.createWriteStream(filePath);
+  doc.pipe(stream);
+
+  const brand = 'Used Car Project';
+  const cPrimary = '#2563EB';
+  const cGreen   = '#10B981';
+  const cAmber   = '#F59E0B';
+  const cIndigo  = '#6366F1';
+  const cText    = '#0F172A';
+  const cMuted   = '#475569';
+  const cRule    = '#E2E8F0';
+
+  doc.rect(40, 40, 532, 46).fill(cPrimary);
+  doc.fillColor('#FFFFFF').fontSize(16).text('Vehicle Appraisal (Customer Copy)', 50, 52, { width: 400 });
+  doc.fontSize(10).text(new Date().toLocaleString(), 50, 72);
+  doc.fillColor('#FFFFFF').fontSize(10).text(brand, 522, 52, { width: 40, align: 'right' });
+  doc.fillColor(cText);
+
+  const bannerY = 100;
+  doc.roundedRect(40, bannerY, 532, 68, 8).strokeColor(cRule).lineWidth(1).stroke();
+  doc.fillColor(cText).fontSize(14).text(vehicle || 'Vehicle', 50, bannerY + 12, { width: 400 });
+  doc.fillColor(cMuted).fontSize(10).text(`VIN: ${vin || '—'}`, 50, bannerY + 36, { width: 260 });
+  if (mileage) doc.text(`Mileage: ${Number(mileage||0).toLocaleString()} mi`, 310, bannerY + 36, { width: 262, align: 'right' });
+  doc.fillColor(cText);
+
+  let y = bannerY + 84;
+  const colW = 260;
+  function card(x, y, w, h, title, accent) {
+    doc.roundedRect(x, y, w, h, 10).fillAndStroke(accent, cRule);
+    doc.fillColor('#FFFFFF').fontSize(11).text(title, x + 12, y + 10);
+    doc.fillColor(cText);
+    doc.roundedRect(x, y + 28, w, h - 28, 10).fill('#FFFFFF').strokeColor(cRule).stroke();
+  }
+
+  const wWholesale = valuation?.wholesale != null ? `$${Number(valuation.wholesale).toLocaleString()}` : '—';
+  const wRetail = valuation?.retail != null ? `$${Number(valuation.retail).toLocaleString()}` : '—';
+  const adj = (adjustedWholesale != null) ? `$${Number(adjustedWholesale).toLocaleString()}` : '—';
+  const ded = deduction ? `$${Number(deduction).toLocaleString()}` : '$0';
+
+  card(40, y, colW, 170, 'Valuation', cGreen);
+  const LX = 54, LW = colW - 28;
+  function line(k, v){ doc.font('Helvetica-Bold').text(k, LX, doc.y + 6, { continued: true, width: LW/2 }); doc.font('Helvetica').text(v, LX + LW/2, doc.y - 14, { align: 'right', width: LW/2 }); }
+  doc.moveDown(1.2);
+  line('Retail', wRetail);
+  line('Wholesale', wWholesale);
+  line('Maint. deduction', `-${ded}`);
+  line('Wholesale (after gaps)', adj);
+
+  const reconTotal = (Array.isArray(additionalCosts) ? additionalCosts.reduce((s,it)=>s+Number(it.amount||0),0) : 0);
+  const targetBuy = (adjustedWholesale != null) ? Math.max(0, Number(adjustedWholesale) - reconTotal) : null;
+  card(312, y, colW, 170, 'Reconditioning Costs', cIndigo);
+  doc.text(' ', 312, y + 34);
+  function rline(k, v){ doc.font('Helvetica-Bold').text(k, 326, doc.y + 6, { continued: true, width: LW/2 }); doc.font('Helvetica').text(v, 326 + LW/2, doc.y - 14, { align: 'right', width: LW/2 }); }
+  rline('Reconditioning total', `$${reconTotal.toLocaleString()}`);
+  rline('Target purchase price', targetBuy != null ? `$${Number(targetBuy).toLocaleString()}` : '—');
+
+  y += 190;
+
+  const tableH = 160;
+  card(40, y, 532, tableH, 'Maintenance Deductions (Reasonable Estimates)', cAmber);
+  doc.text(' ', 40, y + 34);
+  const headerY = doc.y;
+  doc.fontSize(10).fillColor(cMuted).text('Item', 54, headerY, { width: 200 });
+  doc.text('Amount', 340, headerY, { width: 80, align: 'right' });
+  doc.text('Why', 430, headerY, { width: 130 });
+  doc.moveTo(50, headerY + 14).lineTo(560, headerY + 14).strokeColor(cRule).lineWidth(1).stroke();
+  doc.fillColor(cText);
+  let rowY = headerY + 18;
+  const rows = Array.isArray(gapItems) ? gapItems : [];
+  if (rows.length === 0) {
+    doc.text('No deductions applied.', 54, rowY);
+  } else {
+    rows.forEach((it, i) => {
+      const bg = (i % 2 === 0) ? '#F8FAFC' : '#FFFFFF';
+      doc.rect(44, rowY - 4, 520, 18).fill(bg);
+      doc.fillColor(cText).text(it.label || '', 54, rowY, { width: 200 });
+      doc.text(`$${Number(it.amount||0).toLocaleString()}`, 340, rowY, { width: 80, align:'right' });
+      doc.fillColor(cMuted).text(it.rationale || '', 430, rowY, { width: 130 });
+      rowY += 20;
+    });
+  }
+  doc.fillColor(cText);
+  doc.moveTo(50, rowY + 4).lineTo(560, rowY + 4).strokeColor(cRule).stroke();
+  doc.font('Helvetica-Bold').text('Total deduction', 54, rowY + 8, { width: 200 });
+  doc.font('Helvetica').text(ded, 340, rowY + 8, { width: 80, align:'right' });
+
+  // Evidence block
+  if (evidence) {
+    let y2 = rowY + 38;
+    if (y2 < 540) y2 = 540;
+    card(40, y2, 532, 130, 'Evidence Summary', cPrimary);
+    doc.text(' ', 40, y2 + 34);
+    const yy = doc.y;
+    doc.fontSize(10).fillColor(cText).text(`NHTSA Recalls: ${evidence.counts?.recalls ?? 0}`, 54, yy);
+    doc.text(`Complaints: ${evidence.counts?.complaints ?? 0}`, 200, yy);
+    doc.text(`TSBs: ${evidence.counts?.tsbs ?? 0}`, 340, yy);
+    doc.moveTo(50, yy + 14).lineTo(560, yy + 14).strokeColor(cRule).lineWidth(1).stroke();
+    const risks = Array.isArray(evidence.topRisks) ? evidence.topRisks.slice(0,4) : [];
+    let ry = yy + 20;
+    risks.forEach(r => { doc.text(`• ${r.label} — score ${r.score} (${r.rationale})`, 54, ry, { width: 500 }); ry += 14; });
+  }
+
+  doc.fillColor(cMuted).fontSize(9);
+  if (carfaxUrl) doc.text(`Carfax: ${carfaxUrl}`, 40, 740, { link: carfaxUrl, underline: true });
+  doc.text('Estimates are for guidance only and not an official offer. Values depend on inspection/condition.', 40, 752);
+
+  doc.end();
+  stream.on('finish', () => res.json({ ok:true, url:`/reports/${path.basename(filePath)}` }));
+});
+
+app.get('/healthz', (_, res) => res.json({ ok:true }));
+
+app.listen(PORT, () => console.log(`Server running at http://0.0.0.0:${PORT}`));
