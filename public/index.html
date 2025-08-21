@@ -12,8 +12,10 @@
     :root[data-theme="light"]{ --bg:#f7fafc; --surface:#fff; --card:#fff; --text:#0f172a; --muted:#475569; --primary:#2563eb; --btn-text:#fff; --border:#d6e0ee; --accent:#e2e8f0; }
     :root[data-theme="dark"]{ --bg:#0c111c; --surface:#111827; --card:#111827; --text:#e9edf5; --muted:#b8c2d6; --primary:#2563eb; --btn-text:#fff; --border:#223047; --accent:#1e293b; }
     body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; max-width:1100px; margin:0 auto; padding:28px; background:var(--bg); color:var(--text); font-size:16px; line-height:1.5; }
-    input,button,textarea{ padding:12px 14px; margin:6px 0; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:15px; }
-    button{ background:var(--primary)!important; color:var(--btn-text)!important; font-weight:700; cursor:pointer; border:1px solid var(--border); }
+    input,button,textarea{ padding:12px 14px; margin:6px 0; border-radius:12px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:15px; }
+    .btn{ display:inline-flex; align-items:center; gap:8px; padding:12px 18px; border-radius:12px; border:1px solid var(--primary); background:var(--primary); color:var(--btn-text); font-weight:800; letter-spacing:.2px; box-shadow:0 6px 18px rgba(37,99,235,.28); }
+    .btn.secondary{ background:var(--surface); color:var(--primary); border-color:var(--primary); }
+    .btn.full{ width:100%; justify-content:center; }
     .card{ border:1px solid var(--border); background:linear-gradient(180deg,var(--card),var(--surface)); padding:18px; border-radius:16px; margin:16px 0; }
     .grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(260px,1fr)); gap:14px; }
     .stat{ display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--accent); font-size:15px; }
@@ -33,7 +35,7 @@
     <div class="row" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap">
       <input id="vin" placeholder="e.g., 1G1ZE5ST0GF253821" style="flex:2">
       <input id="mileage" type="number" min="0" step="1" placeholder="Current mileage" style="flex:1">
-      <button onclick="lookup()">Lookup</button>
+      <button class="btn" onclick="lookup()">Lookup</button>
     </div>
     <div id="decodedBanner" class="muted" style="margin-top:6px"></div>
     <div id="results" class="grid"></div>
@@ -44,8 +46,8 @@
     <h3 style="margin-top:6px">Upload Carfax PDF</h3>
     <div class="row" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap">
       <input type="file" id="carfax" accept="application/pdf,image/*">
-      <button onclick="uploadCarfax()">Upload</button>
-      <button onclick="ocrLocal()">OCR scanned PDF</button>
+      <button class="btn" onclick="uploadCarfax()">Upload</button>
+      <button class="btn secondary" onclick="ocrLocal()">OCR scanned PDF</button>
       <div id="carfaxSpin" class="muted" style="display:none">Uploading…</div>
     </div>
     <div id="carfaxUrl" class="muted"></div>
@@ -68,7 +70,17 @@
       const w = (v && v.wholesale!==undefined) ? money(v.wholesale) : '—';
       const r = (v && v.retail!==undefined) ? money(v.retail) : '—';
       const adjRow = (adjustedWholesale!=null) ? `<div class="stat"><span><strong>Maintenance deduction</strong></span><span>-${money(gapItems.reduce((s,it)=>s+Number(it.amount||0),0))}</span></div><div class="stat"><span><strong>Wholesale (after gaps)</strong></span><span>${money(adjustedWholesale)}</span></div>` : '';
-      return `<div><h4>Value</h4><div class="card" style="padding:8px"><div class="stat"><span><strong>Wholesale</strong></span><span>${w}</span></div><div class="stat"><span><strong>Retail</strong></span><span>${r}</span></div>${adjRow}</div><div><button onclick="applyMaintenanceDeduction()">Apply Carfax Maintenance Deduction</button></div><details class="muted" style="margin-top:8px"><summary>Raw valuation data</summary><pre>${JSON.stringify(v, null, 2)}</pre></details></div>`;
+      return `<div>
+        <h4>Value</h4>
+        <div class="card" style="padding:8px">
+          <div class="stat"><span><strong>Wholesale</strong></span><span>${w}</span></div>
+          <div class="stat"><span><strong>Retail</strong></span><span>${r}</span></div>
+          ${adjRow}
+        </div>
+        ${adjustedWholesale!=null ? gapBreakdown() : ''}
+        <div><button class="btn full" onclick="applyMaintenanceDeduction()">Apply Maintenance Deduction (Carfax)</button></div>
+        <details class="muted" style="margin-top:8px"><summary>Raw valuation data</summary><pre>${JSON.stringify(v, null, 2)}</pre></details>
+      </div>`;
     }
     function historyBox(h){ const acc=h?.accidents??'—', owners=h?.owners??'—', svc=h?.serviceRecords??'—'; return `<div><h4>History</h4><div class="card" style="padding:8px"><div class="stat"><span><strong>Accidents</strong></span><span>${acc}</span></div><div class="stat"><span><strong>Owners</strong></span><span>${owners}</span></div><div class="stat"><span><strong>Service Records</strong></span><span>${svc}</span></div></div></div>`; }
     function maintenanceBox(m){ const up=(m&&Array.isArray(m.upcoming))?m.upcoming.map(x=>`<li>${x}</li>`).join(''):'<li>—</li>'; const intervals=(m&&m.intervals)?Object.entries(m.intervals).map(([k,v])=>`<li><strong>${k}:</strong> ${v}</li>`).join(''):''; return `<div><h4>Maintenance</h4><div class="card" style="padding:8px"><div><strong>Upcoming</strong></div><ul>${up}</ul><div style="margin-top:6px"><strong>Intervals</strong></div><ul>${intervals}</ul></div></div>`; }
@@ -154,6 +166,25 @@
       adjustedWholesale = res.adjustedWholesale; gapItems = res.items||[];
       document.getElementById('results').innerHTML = valueBox(valuation) + historyBox(history) + maintenanceBox(maintenance);
     }
-  </script>
+  
+    function gapBreakdown(){
+      if (!Array.isArray(gapItems) || !gapItems.length) return '';
+      const rows = gapItems.map(it => `<tr>
+          <td>${it.label}</td>
+          <td style="text-align:right">$${Number(it.amount||0).toLocaleString()}</td>
+          <td class="muted">${it.rationale||''}</td>
+        </tr>`).join('');
+      const total = gapItems.reduce((s,it)=>s+Number(it.amount||0),0);
+      return `<div class="card" style="margin-top:10px">
+        <div class="muted" style="text-transform:uppercase;letter-spacing:.12em">Maintenance Deductions</div>
+        <h3 style="margin-top:6px">Breakdown</h3>
+        <table style="width:100%; border-collapse:collapse; margin-top:6px">
+          <thead><tr><th style="text-align:left">Item</th><th style="text-align:right">Amount</th><th style="text-align:left">Why</th></tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot><tr><td style="text-align:right; font-weight:700">Total</td><td style="text-align:right; font-weight:700">$${total.toLocaleString()}</td><td></td></tr></tfoot>
+        </table>
+      </div>`;
+    }
+</script>
 </body>
 </html>
