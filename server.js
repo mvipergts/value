@@ -27,14 +27,12 @@ const dataDir = path.join(__dirname, 'data');
 app.use('/uploads', express.static(uploadDir));
 app.use('/reports', express.static(reportsDir));
 
-// multer storage
 const storage = multer.diskStorage({
   destination: (_, __, cb) => cb(null, uploadDir),
   filename: (_, file, cb) => cb(null, Date.now() + '_' + file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_'))
 });
 const upload = multer({ storage });
 
-// simple local store (if needed later)
 const storeFile = path.join(dataDir, 'appraisals.json');
 if (!fs.existsSync(storeFile)) fs.writeFileSync(storeFile, '[]');
 const readStore = () => JSON.parse(fs.readFileSync(storeFile, 'utf8'));
@@ -96,7 +94,7 @@ const COST_MAP = {
   "Spark plugs": 250, "Wiper blades": 30
 };
 
-// ---- VIN decode (VPIC) ----
+// ---- VIN decode ----
 app.get('/api/vin/:vin', async (req, res) => {
   try {
     const vin = String(req.params.vin || '').trim();
@@ -160,7 +158,7 @@ app.post('/api/carfax/summarize-text', async (req, res) => {
   } catch (e) { res.status(500).json({ ok:false, error:'summarize_failed' }); }
 });
 
-// ---- Maintenance gap inference ----
+// ---- Maintenance gap inference (dedup + merged rationales) ----
 function inferMissingMaintenance({ summary = {}, text = '', mileage = 0, year = 0 }) {
   const t = String(text || '').toLowerCase();
   const m = Number(mileage || 0);
@@ -168,8 +166,11 @@ function inferMissingMaintenance({ summary = {}, text = '', mileage = 0, year = 
   const age = (year && year > 1900 && year <= now) ? (now - year) : 0;
   const svcCount = Number(summary?.serviceRecords || 0);
 
-  const items = [];
-  const push = (label, rationale) => items.push({ label, rationale, source:'carfax_gap' });
+  const map = new Map();
+  function push(label, rationale){
+    if (!map.has(label)) map.set(label, { label, rationale:[], source:'carfax_gap' });
+    map.get(label).rationale.push(rationale);
+  }
   const has = (kw) => t.includes(kw);
   const noneOf = (...kws) => !kws.some(has);
 
@@ -186,7 +187,7 @@ function inferMissingMaintenance({ summary = {}, text = '', mileage = 0, year = 
     if (noneOf('coolant service','coolant flush','radiator flushed')) push('Coolant service','>=60k mi and no service noted');
   }
   if (m >= 90000 && noneOf('spark plug')) push('Spark plugs','>=90k mi and no plugs noted');
-  return items;
+  return Array.from(map.values());
 }
 
 // ---- Adjusted wholesale ----
@@ -199,48 +200,6 @@ app.post('/api/value/adjusted', async (req, res) => {
     const adjustedWholesale = Math.max(0, Math.round(Number(baseWholesale || 0) - deduction));
     res.json({ ok:true, baseWholesale: Number(baseWholesale||0), deduction, adjustedWholesale, items: priced });
   } catch (e) { res.status(500).json({ ok:false, error:'adjust_failed' }); }
-});
-
-// ---- Basic PDF report (developer copy) ----
-app.post('/api/report', (req, res) => {
-  const { vin, vehicle, valuation, history, maintenance, carfaxUrl, carfaxSummary, hiddenMaintenanceCost, additionalCosts, mileage } = req.body || {};
-  const filePath = path.join(reportsDir, `${vin || 'report'}_${Date.now()}.pdf`);
-  const doc = new PDFDocument({ margin: 40, size: 'LETTER' });
-  const stream = fs.createWriteStream(filePath);
-  doc.pipe(stream);
-
-  const brand = 'Used Car Project';
-  doc.rect(40, 40, 532, 40).fill('#0F172A');
-  doc.fillColor('#FFFFFF').fontSize(16).text(brand, 50, 52, { width: 512, align: 'left' });
-  doc.fillColor('#475569').fontSize(10);
-  doc.moveTo(40, 90).lineTo(572, 90).strokeColor('#E2E8F0').lineWidth(1).stroke();
-
-  doc.fillColor('#0F172A').fontSize(18).text('Vehicle Appraisal Report', 40, 100);
-  doc.fontSize(10).fillColor('#475569').text(new Date().toLocaleString(), { align: 'right' });
-
-  const y0 = 130;
-  doc.roundedRect(40, y0, 532, 90, 8).strokeColor('#E2E8F0').lineWidth(1).stroke();
-  doc.fontSize(11).fillColor('#0F172A');
-  const top1 = [['VIN', vin || 'N/A'], ['Vehicle', vehicle || '—'], ['Mileage', (typeof mileage !== 'undefined') ? `${Number(mileage||0).toLocaleString()} mi` : '—']];
-  const wholesale = valuation?.wholesale != null ? `$${Number(valuation.wholesale).toLocaleString()}` : '—';
-  const retail = valuation?.retail != null ? `$${Number(valuation.retail).toLocaleString()}` : '—';
-  const top2 = [['Wholesale', wholesale], ['Retail', retail], ['Recon Total', '$0']];
-  const colW = 532/2;
-  let y = y0 + 12;
-  top1.forEach((kv, i) => { const yy = y + i*18; doc.text(kv[0], 50, yy, { width: colW-20, continued: true }).fillColor('#111827').text(kv[1]).fillColor('#0F172A'); });
-  top2.forEach((kv, i) => { const yy = y + i*18; doc.text(kv[0], 50+colW, yy, { width: colW-20, continued: true }).fillColor('#111827').text(kv[1]).fillColor('#0F172A'); });
-
-  function section(title) { y = doc.y + 16; doc.fillColor('#334155').fontSize(12).text(title, 40, y); doc.moveDown(0.2); doc.moveTo(40, doc.y).lineTo(572, doc.y).strokeColor('#E2E8F0').lineWidth(1).stroke(); doc.moveDown(0.3); doc.fillColor('#0F172A').fontSize(10); }
-  section('History'); doc.text(history ? JSON.stringify(history, null, 2) : '—');
-  section('Maintenance'); doc.text(maintenance ? JSON.stringify(maintenance, null, 2) : '—');
-  if (carfaxSummary) { section('Carfax Summary'); doc.text(JSON.stringify(carfaxSummary, null, 2)); }
-  if (carfaxUrl) { doc.moveDown().fontSize(10).fillColor('#2563EB').text(`Carfax: ${carfaxUrl}`, { link: carfaxUrl, underline: true }); doc.fillColor('#0F172A'); }
-
-  doc.moveTo(40, 740).lineTo(572, 740).strokeColor('#E2E8F0').lineWidth(1).stroke();
-  doc.fontSize(9).fillColor('#64748B').text('Generated by Used Car Project', 40, 745);
-
-  doc.end();
-  stream.on('finish', () => res.json({ ok:true, path:filePath, url:`/reports/${path.basename(filePath)}` }));
 });
 
 // ---------- Common issues (NHTSA + optional web search; NO OpenAI required) ----------
@@ -325,7 +284,7 @@ app.post('/api/maintenance/common-issues', async (req, res) => {
   }
 });
 
-// ---------- Technical Service Bulletins (TSB) via DOT Socrata dataset ----------
+// ---------- TSB via DOT Socrata ----------
 app.post('/api/maintenance/tsb', async (req, res) => {
   try {
     const { vin='', vehicle='' } = req.body || {};
@@ -375,7 +334,7 @@ app.post('/api/maintenance/tsb', async (req, res) => {
   }
 });
 
-// ---------- Evidence (recalls+complaints+TSB) with risk scoring ----------
+// ---------- Evidence (recalls+complaints+TSB) with risk scoring & checks ----------
 app.post('/api/evidence/score', async (req, res) => {
   try {
     const { vin='', vehicle='' } = req.body || {};
@@ -448,6 +407,38 @@ app.post('/api/evidence/score', async (req, res) => {
       buckets.forEach(b => { if (lowerIncludes(txt, b.key)) buckTSB.set(b.label, true); });
     });
 
+    function makeChecks(label, recallText){
+      const checks = [];
+      const add = s => { if (!checks.includes(s)) checks.push(s); };
+      const rt = (recallText||'').toLowerCase();
+      if (label.startsWith('Engine')){
+        add('Check for excessive oil consumption (qt/1k mi), blue smoke, fouled plugs');
+        add('Scan for misfire codes; PCV/valve cover leaks');
+      } else if (label === 'Transmission'){
+        add('Test drive: look for 2→3 shift flare/harshness or delay (step-gear)');
+        add('If CVT: check for low-speed judder/slip; verify fluid service history');
+        if (rt.includes('shift') || rt.includes('gear')) add('Confirm TCM updates / recall remedies applied');
+      } else if (label === 'Brakes'){
+        add('Check pad/rotor thickness; pulsation under braking; fluid moisture %');
+      } else if (label === 'Airbags / SRS'){
+        add('Run SRS scan; verify recall completion; inspect warning lights');
+      } else if (label === 'Electrical'){
+        add('Battery/alternator load test; parasitic draw check');
+      } else if (label === 'Steering'){
+        add('Free play test; alignment/centering; EPS fault scan');
+      } else if (label === 'Suspension'){
+        add('Inspect struts, control arm bushings, sway links for play/leaks');
+      } else if (label === 'Fuel system'){
+        add('EVAP leak test; fuel pump noise/pressure; injector balance');
+      } else if (label === 'HVAC / A/C'){
+        add('Vent temp at idle and cruise; blend door operation; compressor noise');
+      } else if (label === 'Paint / Exterior'){
+        add('Inspect clear coat/oxidation; look for prior paintwork or panel mismatch');
+      }
+      return checks;
+    }
+
+    const recallText = (recalls||[]).map(r => (r.Component||'') + ' ' + (r.Summary||'')).join(' ').toLowerCase();
     const scored = buckets.map(b => {
       const c = buckCounts.get(b.label)||0;
       const hasT = !!buckTSB.get(b.label);
@@ -458,9 +449,11 @@ app.post('/api/evidence/score', async (req, res) => {
         hasR ? 'Recall mention (+2)' : null,
         c ? `${c} complaints (~+${Math.floor(c/10)})` : null
       ].filter(Boolean).join(' · ');
-      return { label: b.label, complaints: c, tsb: hasT, recall: hasR, score, rationale };
+      const checks = makeChecks(b.label, recallText);
+      return { label: b.label, complaints: c, tsb: hasT, recall: hasR, score, rationale, checks };
     }).filter(x => x.score > 0).sort((a,b)=>b.score-a.score).slice(0,5);
 
+    // Optional web corroboration (SerpAPI) adds +1 to matching buckets
     const SERP_API_KEY = process.env.SERP_API_KEY || '';
     const allow = ['nhtsa.gov','carcomplaints.com','repairpal.com','consumerreports.org','iihs.org','edmunds.com','kbb.com','cars.com'];
     if (SERP_API_KEY) {
@@ -510,7 +503,7 @@ app.post('/api/evidence/score', async (req, res) => {
   }
 });
 
-// ---------- Customer PDF (branded, with deduction, recon, evidence) ----------
+// ---------- Customer PDF ----------
 app.post('/api/report/customer', (req, res) => {
   const { vin, vehicle='', valuation={}, adjustedWholesale=null, deduction=0, gapItems=[], carfaxSummary={}, carfaxUrl='', mileage=0, additionalCosts=[], evidence=null } = req.body || {};
   const filePath = path.join(reportsDir, `${vin || 'customer'}_${Date.now()}.pdf`);
@@ -592,7 +585,8 @@ app.post('/api/report/customer', (req, res) => {
       doc.rect(44, rowY - 4, 520, 18).fill(bg);
       doc.fillColor(cText).text(it.label || '', 54, rowY, { width: 200 });
       doc.text(`$${Number(it.amount||0).toLocaleString()}`, 340, rowY, { width: 80, align:'right' });
-      doc.fillColor(cMuted).text(it.rationale || '', 430, rowY, { width: 130 });
+      const why = Array.isArray(it.rationale) ? it.rationale.join(' • ') : (it.rationale || '');
+      doc.fillColor(cMuted).text(why, 430, rowY, { width: 130 });
       rowY += 20;
     });
   }
@@ -601,7 +595,6 @@ app.post('/api/report/customer', (req, res) => {
   doc.font('Helvetica-Bold').text('Total deduction', 54, rowY + 8, { width: 200 });
   doc.font('Helvetica').text(ded, 340, rowY + 8, { width: 80, align:'right' });
 
-  // Evidence block
   if (evidence) {
     let y2 = rowY + 38;
     if (y2 < 540) y2 = 540;
@@ -614,7 +607,13 @@ app.post('/api/report/customer', (req, res) => {
     doc.moveTo(50, yy + 14).lineTo(560, yy + 14).strokeColor(cRule).lineWidth(1).stroke();
     const risks = Array.isArray(evidence.topRisks) ? evidence.topRisks.slice(0,4) : [];
     let ry = yy + 20;
-    risks.forEach(r => { doc.text(`• ${r.label} — score ${r.score} (${r.rationale})`, 54, ry, { width: 500 }); ry += 14; });
+    risks.forEach(r => { 
+      doc.text(`• ${r.label} — score ${r.score} (${r.rationale})`, 54, ry, { width: 500 }); ry += 14; 
+      if (Array.isArray(r.checks)) { 
+        r.checks.slice(0,2).forEach(c => { doc.fontSize(9).fillColor(cMuted).text(`   - ${c}`, 54, ry, { width: 500 }); ry += 12; });
+        doc.fontSize(10).fillColor(cText);
+      }
+    });
   }
 
   doc.fillColor(cMuted).fontSize(9);

@@ -24,7 +24,6 @@
     .stat:last-child{ border-bottom:0; }
     .muted{ color:var(--muted); font-size:12px; }
     pre{ background:#0a0f1a10; padding:12px; border-radius:12px; border:1px dashed var(--accent); white-space:pre-wrap }
-    /* Tinted cards */
     .card-value{ border-color: rgba(16,185,129,.35); background: linear-gradient(180deg, rgba(16,185,129,.08), var(--card)); box-shadow: 0 10px 24px rgba(16,185,129,.12); }
     .card-history{ border-color: rgba(245,158,11,.35); background: linear-gradient(180deg, rgba(245,158,11,.10), var(--card)); box-shadow: 0 10px 24px rgba(245,158,11,.14); }
     .card-maint{ border-color: rgba(99,102,241,.35); background: linear-gradient(180deg, rgba(99,102,241,.10), var(--card)); box-shadow: 0 10px 24px rgba(99,102,241,.16); }
@@ -98,6 +97,21 @@
     </table>
   </div>
 
+  <div class="card card-maint" style="border-left:4px solid #6366F1">
+    <div style="display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-bottom:8px">
+      <button class="btn" onclick="fetchCommonIssues()">Get Common Issues</button>
+      <button class="btn secondary" onclick="fetchTSBs()">Get TSBs</button>
+    </div>
+    <div id="commonIssuesCallout" style="display:none; border-left:4px solid #F59E0B; background:rgba(245,158,11,.07); padding:10px; border-radius:10px; margin-bottom:8px">
+      <strong>Heads up:</strong> <span id="commonNote"></span>
+    </div>
+    <div id="tsbBox" style="display:none; margin-top:8px; border-left:4px solid #6366F1; background:rgba(99,102,241,.08); padding:10px; border-radius:10px">
+      <div class="muted" style="text-transform:uppercase; letter-spacing:.12em">Technical Service Bulletins</div>
+      <div id="tsbCount" class="muted"></div>
+      <ul id="tsbList" style="margin-top:6px"></ul>
+    </div>
+  </div>
+
   <div class="card" style="border-left:4px solid #0EA5E9">
     <div style="display:flex; justify-content:space-between; align-items:center">
       <div>
@@ -135,6 +149,13 @@
     const money = n => '$'+Number(n||0).toLocaleString();
     function vehicleBanner(d){ const y=d?.year||'—', make=d?.make||'—', model=d?.model||'—', trim=d?.trim||''; const miles=document.getElementById('mileage').value; const label=[y,make,model,trim].filter(Boolean).join(' '); return `<div class="card" style="padding:14px; border:2px solid var(--accent)"><strong style="font-size:18px">${label}</strong>${d?.bodyClass?` · ${d.bodyClass}`:''}${miles?` · ${Number(miles).toLocaleString()} mi`:''}</div>`; }
 
+    function gapBreakdown(){
+      if (!Array.isArray(gapItems) || !gapItems.length) return '';
+      const rows = gapItems.map(it => `<tr><td>${it.label}</td><td style="text-align:right">${money(it.amount)}</td><td class="muted">${Array.isArray(it.rationale)?it.rationale.join(' • '):(it.rationale||'')}</td></tr>`).join('');
+      const total = gapItems.reduce((s,it)=>s+Number(it.amount||0),0);
+      return `<div class="card" style="margin-top:10px"><div class="muted" style="text-transform:uppercase;letter-spacing:.12em">Maintenance Deductions</div><h3 style="margin-top:6px">Breakdown</h3><table style="width:100%; border-collapse:collapse; margin-top:6px"><thead><tr><th style="text-align:left">Item</th><th style="text-align:right">Amount</th><th style="text-align:left">Why</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td style="text-align:right; font-weight:700">Total</td><td style="text-align:right; font-weight:700">${money(total)}</td><td></td></tr></tfoot></table></div>`;
+    }
+
     function valueBox(v){
       const w = (v && v.wholesale!==undefined) ? money(v.wholesale) : '—';
       const r = (v && v.retail!==undefined) ? money(v.retail) : '—';
@@ -150,14 +171,7 @@
 
     function historyBox(h){ const acc=h?.accidents??'—', owners=h?.owners??'—', svc=h?.serviceRecords??'—'; return `<div><h4 style="font-size:18px">History</h4><div class="card card-history" style="padding:12px"><div class="stat"><span><strong>Accidents</strong></span><span>${acc}</span></div><div class="stat"><span><strong>Owners</strong></span><span>${owners}</span></div><div class="stat"><span><strong>Service Records</strong></span><span>${svc}</span></div></div></div>`; }
 
-    function maintenanceBox(m){ const up=(m&&Array.isArray(m.upcoming))?m.upcoming.map(x=>`<li>${x}</li>`).join(''):'<li>—</li>'; const intervals=(m&&m.intervals)?Object.entries(m.intervals).map(([k,v])=>`<li><strong>${k}:</strong> ${v}</li>`).join(''):''; return `<div><h4 style="font-size:18px">Maintenance</h4><div class="card card-maint" style="padding:12px"><div style="display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-bottom:8px"><button class="btn" onclick="fetchCommonIssues()">Get Common Issues</button><button class="btn secondary" onclick="fetchTSBs()">Get TSBs</button></div><div id="commonIssuesCallout" style="display:none; border-left:4px solid #F59E0B; background:rgba(245,158,11,.07); padding:10px; border-radius:10px; margin-bottom:8px"><strong>Heads up:</strong> <span id="commonNote"></span></div><div id="tsbBox" style="display:none; margin-top:8px; border-left:4px solid #6366F1; background:rgba(99,102,241,.08); padding:10px; border-radius:10px"><div class="muted" style="text-transform:uppercase; letter-spacing:.12em">Technical Service Bulletins</div><div id="tsbCount" class="muted"></div><ul id="tsbList" style="margin-top:6px"></ul></div><div><strong>Upcoming</strong></div><ul>${up}</ul><div style="margin-top:6px"><strong>Intervals</strong></div><ul>${intervals}</ul></div></div>`; }
-
-    function gapBreakdown(){
-      if (!Array.isArray(gapItems) || !gapItems.length) return '';
-      const rows = gapItems.map(it => `<tr><td>${it.label}</td><td style="text-align:right">${money(it.amount)}</td><td class="muted">${it.rationale||''}</td></tr>`).join('');
-      const total = gapItems.reduce((s,it)=>s+Number(it.amount||0),0);
-      return `<div class="card" style="margin-top:10px"><div class="muted" style="text-transform:uppercase;letter-spacing:.12em">Maintenance Deductions</div><h3 style="margin-top:6px">Breakdown</h3><table style="width:100%; border-collapse:collapse; margin-top:6px"><thead><tr><th style="text-align:left">Item</th><th style="text-align:right">Amount</th><th style="text-align:left">Why</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td style="text-align:right; font-weight:700">Total</td><td style="text-align:right; font-weight:700">${money(total)}</td><td></td></tr></tfoot></table></div>`;
-    }
+    function maintenanceBox(m){ const up=(m&&Array.isArray(m.upcoming))?m.upcoming.map(x=>`<li>${x}</li>`).join(''):'<li>—</li>'; const intervals=(m&&m.intervals)?Object.entries(m.intervals).map(([k,v])=>`<li><strong>${k}:</strong> ${v}</li>`).join(''):''; return `<div><h4 style="font-size:18px">Maintenance</h4><div class="card card-maint" style="padding:12px"><div style="display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-bottom:8px"><button class="btn" onclick="fetchCommonIssues()">Get Common Issues</button><button class="btn secondary" onclick="fetchTSBs()">Get TSBs</button></div><div id="commonIssuesCallout" style="display:none; border-left:4px solid #F59E0B; background:rgba(245,158,11,.07); padding:10px; border-radius:10px; margin-bottom:8px"><strong>Heads up:</strong> <span id="commonNote"></span></div><div id="tsbBox" style="display:none; margin-top:8px; border-left:4px solid #6366F1; background:rgba(99,102,241,.08); padding:10px; border-radius:10px"><div class="muted" style="text-transform:uppercase; letter-spacing:.12em">Technical Service Bulletins</div><div id="tsbCount" class="muted"></div><ul id="tsbList" style="margin-top:6px"></ul></div><div class="muted" style="margin-top:8px"><strong>Upcoming</strong><ul>${up}</ul><strong>Intervals</strong><ul>${intervals}</ul></div></div></div>`; }
 
     async function lookup(){
       const vin=document.getElementById('vin').value.trim(); if(!vin) return alert('Enter a VIN');
@@ -191,6 +205,13 @@
       if (!entries.length) return '<div class="card"><em>No Carfax summary extracted.</em></div>';
       const html = entries.map(([k,v]) => `<div class="stat"><span><strong>${k}</strong></span><span>${Array.isArray(v)?v.join(', '):String(v)}</span></div>`).join('');
       return `<div class="card"><div class="muted" style="text-transform:uppercase;letter-spacing:.12em">Carfax</div><h3>Summary</h3>${html}</div>`;
+    }
+
+    async function summarizeCarfaxText(){
+      const raw = document.getElementById('carfaxPaste').value||'';
+      if (!raw.trim()) return alert('Paste Carfax text first');
+      const res = await fetch('/api/carfax/summarize-text', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rawText: raw }) }).then(r=>r.json());
+      if (res.ok) { carfaxSummary = res.summary; document.getElementById('carfaxSummaryBox').innerHTML = carfaxBox(carfaxSummary); }
     }
 
     async function ocrLocal(){
@@ -286,15 +307,18 @@
       const bC = document.getElementById('badgeComplaints'); bC.style.display='inline-block'; bC.innerText = `Complaints: ${res.counts?.complaints ?? 0}`;
       const bT = document.getElementById('badgeTSB'); bT.style.display='inline-block'; bT.innerText = `TSBs: ${res.counts?.tsbs ?? 0}`;
       const risks = res.topRisks || [];
-      document.getElementById('riskList').innerHTML = risks.map(r => `<li><strong>${r.label}</strong> — score ${r.score} <span class="muted">(${r.rationale})</span></li>`).join('') || '<li class="muted">No notable risks found.</li>';
+      document.getElementById('riskList').innerHTML = risks.map(r => `<li><strong>${r.label}</strong> — score ${r.score} <span class="muted">(${r.rationale})</span>${(Array.isArray(r.checks)&&r.checks.length)?('<ul>'+r.checks.map(c=>`<li>${c}</li>`).join('')+'</ul>'):''}</li>`).join('') || '<li class="muted">No notable risks found.</li>';
     }
 
     function applyEvidenceToRecon(){
       if (!_evidence) { alert('Run Get Evidence first'); return; }
       const recs = _evidence.recommendations || [];
       if (!Array.isArray(recs) || !recs.length){ alert('No recon suggestions from evidence'); return; }
-      recs.forEach(it => costItems.push(it));
+      const labels = new Set(costItems.map(x=>x.label).concat((gapItems||[]).map(x=>x.label)));
+      let skipped=0, added=0;
+      recs.forEach(it => { if (!labels.has(it.label)) { costItems.push(it); labels.add(it.label); added++; } else { skipped++; } });
       renderCosts();
+      if (skipped) console.log(`Skipped ${skipped} duplicate suggestion(s)`);
       alert('Top risk suggestions added to Recon.');
     }
 
