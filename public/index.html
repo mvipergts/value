@@ -11,7 +11,9 @@
   <style>
     :root[data-theme="light"]{ --bg:#f7fafc; --surface:#fff; --card:#fff; --text:#0f172a; --muted:#475569; --primary:#2563eb; --btn-text:#fff; --border:#d6e0ee; --accent:#e2e8f0; }
     :root[data-theme="dark"]{ --bg:#0c111c; --surface:#111827; --card:#111827; --text:#e9edf5; --muted:#b8c2d6; --primary:#2563eb; --btn-text:#fff; --border:#223047; --accent:#1e293b; }
-    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; max-width:1100px; margin:0 auto; padding:28px; background:var(--bg); color:var(--text); font-size:16px; line-height:1.5; }
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; max-width:1100px; margin:0 auto; padding:28px; 
+      background: linear-gradient(180deg, var(--accent) 0%, var(--bg) 18%); 
+      color:var(--text); font-size:16px; line-height:1.5; }
     input,button,textarea{ padding:12px 14px; margin:6px 0; border-radius:12px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:15px; }
     .btn{ display:inline-flex; align-items:center; gap:8px; padding:12px 18px; border-radius:12px; border:1px solid var(--primary); background:var(--primary); color:var(--btn-text); font-weight:800; letter-spacing:.2px; box-shadow:0 6px 18px rgba(37,99,235,.28); }
     .btn.secondary{ background:var(--surface); color:var(--primary); border-color:var(--primary); }
@@ -22,7 +24,34 @@
     .stat:last-child{ border-bottom:0; }
     .muted{ color:var(--muted); font-size:12px; }
     pre{ background:#0a0f1a10; padding:12px; border-radius:12px; border:1px dashed var(--accent); white-space:pre-wrap }
-  </style>
+  
+    /* Tinted section cards to break up white */
+    .card-value{ 
+      border-color: rgba(16,185,129,.35); 
+      background: linear-gradient(180deg, rgba(16,185,129,.08), var(--card));
+      box-shadow: 0 10px 24px rgba(16,185,129,.12);
+    }
+    .card-history{ 
+      border-color: rgba(245,158,11,.35); 
+      background: linear-gradient(180deg, rgba(245,158,11,.10), var(--card));
+      box-shadow: 0 10px 24px rgba(245,158,11,.14);
+    }
+    .card-maint{ 
+      border-color: rgba(99,102,241,.35); 
+      background: linear-gradient(180deg, rgba(99,102,241,.10), var(--card));
+      box-shadow: 0 10px 24px rgba(99,102,241,.16);
+    }
+    .stat span:first-child strong{ color:#0f172a; }
+    [data-theme="dark"] .stat span:first-child strong{ color:#e5e7eb; }
+
+    /* Table zebra + header tint */
+    table thead th{ background: rgba(2,6,23,.03); padding:8px; }
+    table tbody tr:nth-child(odd){ background: rgba(2,6,23,.02); }
+    table td{ padding:8px; }
+
+    /* Vehicle banner tint */
+    #decodedBanner .card{ background: linear-gradient(180deg, rgba(37,99,235,.06), var(--surface)); border-color: rgba(37,99,235,.35); }
+</style>
 </head>
 <body data-theme="light">
   <div style="display:flex; justify-content:space-between; align-items:center; gap:12px">
@@ -71,7 +100,7 @@
       const r = (v && v.retail!==undefined) ? money(v.retail) : '—';
       const adjRow = (adjustedWholesale!=null) ? `<div class="stat"><span><strong>Maintenance deduction</strong></span><span>-${money(gapItems.reduce((s,it)=>s+Number(it.amount||0),0))}</span></div><div class="stat"><span><strong>Wholesale (after gaps)</strong></span><span>${money(adjustedWholesale)}</span></div>` : '';
       return `<div>
-        <h4>Value</h4>
+        <h4 style="font-size:18px">Value</h4>
         <div class="card" style="padding:8px">
           <div class="stat"><span><strong>Wholesale</strong></span><span>${w}</span></div>
           <div class="stat"><span><strong>Retail</strong></span><span>${r}</span></div>
@@ -82,8 +111,8 @@
         <details class="muted" style="margin-top:8px"><summary>Raw valuation data</summary><pre>${JSON.stringify(v, null, 2)}</pre></details>
       </div>`;
     }
-    function historyBox(h){ const acc=h?.accidents??'—', owners=h?.owners??'—', svc=h?.serviceRecords??'—'; return `<div><h4>History</h4><div class="card" style="padding:8px"><div class="stat"><span><strong>Accidents</strong></span><span>${acc}</span></div><div class="stat"><span><strong>Owners</strong></span><span>${owners}</span></div><div class="stat"><span><strong>Service Records</strong></span><span>${svc}</span></div></div></div>`; }
-    function maintenanceBox(m){ const up=(m&&Array.isArray(m.upcoming))?m.upcoming.map(x=>`<li>${x}</li>`).join(''):'<li>—</li>'; const intervals=(m&&m.intervals)?Object.entries(m.intervals).map(([k,v])=>`<li><strong>${k}:</strong> ${v}</li>`).join(''):''; return `<div><h4>Maintenance</h4><div class="card" style="padding:8px"><div><strong>Upcoming</strong></div><ul>${up}</ul><div style="margin-top:6px"><strong>Intervals</strong></div><ul>${intervals}</ul></div></div>`; }
+    function historyBox(h){ const acc=h?.accidents??'—', owners=h?.owners??'—', svc=h?.serviceRecords??'—'; return `<div><h4 style="font-size:18px">History</h4><div class="card card-value" style="padding:12px"><div class="stat"><span><strong>Accidents</strong></span><span>${acc}</span></div><div class="stat"><span><strong>Owners</strong></span><span>${owners}</span></div><div class="stat"><span><strong>Service Records</strong></span><span>${svc}</span></div></div></div>`; }
+    function maintenanceBox(m){ const up=(m&&Array.isArray(m.upcoming))?m.upcoming.map(x=>`<li>${x}</li>`).join(''):'<li>—</li>'; const intervals=(m&&m.intervals)?Object.entries(m.intervals).map(([k,v])=>`<li><strong>${k}:</strong> ${v}</li>`).join(''):''; return `<div><h4 style="font-size:18px">Maintenance</h4><div class="card card-maint" style="padding:12px"><div><strong>Upcoming</strong></div><ul>${up}</ul><div style="margin-top:6px"><strong>Intervals</strong></div><ul>${intervals}</ul></div></div>`; }
 
     async function lookup(){
       const vin=document.getElementById('vin').value.trim(); if(!vin) return alert('Enter a VIN');
