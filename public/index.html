@@ -5,73 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Car Value, History & Maintenance Tool</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    :root[data-theme="dark"]{
-      --bg:#0c111c;
-      --surface:#111827;
-      --card:#111827;
-      --card-2:#0f172a;
-      --text:#e9edf5;
-      --muted:#b8c2d6;
-      --primary:#2563eb;
-      --btn-text:#ffffff;
-      --border:#223047;
-      --accent:#1e293b;
-    }
-    :root[data-theme="light"]{
-      --bg:#f7fafc;
-      --surface:#ffffff;
-      --card:#ffffff;
-      --card-2:#f8fafc;
-      --text:#0f172a;
-      --muted:#475569;
-      --primary:#2563eb;
-      --btn-text:#ffffff;
-      --border:#d6e0ee;
-      --accent:#e2e8f0;
-    }
-    *{ box-sizing: border-box; }
-    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji','Segoe UI Emoji'; max-width: 1100px; margin: 0 auto; padding: 28px; background: var(--bg); color: var(--text); font-size:16px; line-height:1.5; }
-    h1{ font-weight:700; letter-spacing:.2px; }
-    input, button, textarea { padding: 12px 14px; margin: 6px 0; border-radius:10px; border:1px solid var(--border); background: var(--surface); color: var(--text); font-size:15px; }
-    input::placeholder, textarea::placeholder{ color:#64748b; }
-    button { background: var(--primary) !important; border:1px solid var(--border); color: var(--btn-text) !important; font-weight:700; cursor:pointer; box-shadow: 0 6px 16px rgba(37,99,235,.25); letter-spacing:.2px; }
-    button:hover{ filter: brightness(1.05); transform: translateY(-1px); }
-    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-    .card { border: 1px solid var(--border); background: linear-gradient(180deg, var(--card), var(--card-2)); padding: 18px; border-radius: 16px; margin: 16px 0; box-shadow: 0 8px 30px rgba(0,0,0,.12); }
-    label { font-weight: 600; color: var(--muted); }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 14px; }
-    pre { white-space: pre-wrap; word-break: break-word; background: #0a0f1a; padding: 12px; border-radius: 12px; border:1px dashed var(--accent); }
-    .stat { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--accent); font-size:15px; }
-    .stat:last-child { border-bottom:0; }
-    .muted { color:var(--muted); font-size:12px; }
-    .section-title{ font-weight:600; color:#93c5fd; text-transform:uppercase; font-size:12px; letter-spacing:.14em; }
-    .badge { display:inline-block; padding:4px 8px; border-radius:999px; background:#0ea5e9; color:#001018; font-weight:700; font-size:12px; }
-    .kv { display:grid; grid-template-columns:auto 1fr; gap:6px 12px; }
-    a{ color:#93c5fd; }
-    .spinner{ display:none; width:18px; height:18px; border:3px solid #1f2937; border-top-color:#60a5fa; border-radius:50%; animation:spin 1s linear infinite; }
-    .loading .spinner{ display:inline-block; }
-    @keyframes spin{ to{ transform: rotate(360deg);} }
-  
-    body { font-family: Arial, sans-serif; max-width: 960px; margin: 0 auto; padding: 20px; }
-    input, button, textarea { padding: 8px; margin: 6px 0; }
-    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-    .card { border: 1px solid #ddd; padding: 12px; border-radius: 8px; margin: 12px 0; }
-    label { font-weight: bold; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); gap: 12px; }
-    pre { white-space: pre-wrap; word-break: break-word; }
-    .stat { display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #eee; }
-    .stat:last-child { border-bottom:0; }
-    .kv { display:grid; grid-template-columns:auto 1fr; gap:6px 12px; }
-    .muted { color:#666; font-size:12px; }
-  </style>
-
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script>pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";</script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    :root[data-theme="light"]{
+      --bg:#f7fafc; --surface:#ffffff; --card:#ffffff; --card-2:#f8fafc;
+      --text:#0f172a; --muted:#475569; --primary:#2563eb; --btn-text:#ffffff;
+      --border:#d6e0ee; --accent:#e2e8f0;
+    }
+    :root[data-theme="dark"]{
+      --bg:#0c111c; --surface:#111827; --card:#111827; --card-2:#0f172a;
+      --text:#e9edf5; --muted:#b8c2d6; --primary:#2563eb; --btn-text:#ffffff;
+      --border:#223047; --accent:#1e293b;
+    }
+    *{ box-sizing:border-box }
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial; max-width: 1100px; margin: 0 auto; padding: 28px; background: var(--bg); color: var(--text); font-size:16px; line-height:1.5; }
+    input, button, textarea { padding: 12px 14px; margin: 6px 0; border-radius:10px; border:1px solid var(--border); background: var(--surface); color: var(--text); font-size:15px; }
+    button { background: var(--primary) !important; border:1px solid var(--border); color: var(--btn-text) !important; font-weight:700; cursor:pointer; box-shadow: 0 6px 16px rgba(37,99,235,.25); letter-spacing:.2px; }
+    button:hover{ filter: brightness(1.05); transform: translateY(-1px); }
+    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .card { border: 1px solid var(--border); background: linear-gradient(180deg, var(--card), var(--card-2)); padding: 18px; border-radius: 16px; margin: 16px 0; box-shadow: 0 8px 30px rgba(0,0,0,.12); }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap:14px; }
+    .stat { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--accent); font-size:15px; }
+    .stat:last-child{ border-bottom:0; }
+    .muted{ color:var(--muted); font-size:12px; }
+    pre { white-space:pre-wrap; word-break:break-word; background:#0a0f1a10; padding:12px; border-radius:12px; border:1px dashed var(--accent); }
+    a{ color:#2563eb }
+  </style>
 </head>
-<body data-theme="dark">
-  <div style="display:flex; justify-content:space-between; align-items:center; gap:12px"><h1 style="margin:0">Car Value, History & Maintenance Tool</h1><button id="themeBtn" onclick="toggleTheme()" style="background:#334155">Light mode</button></div>
+<body data-theme="light">
+  <div style="display:flex; justify-content:space-between; align-items:center; gap:12px">
+    <h1 style="margin:0">Car Value, History & Maintenance Tool</h1>
+    <button id="themeBtn" onclick="toggleTheme()" style="background:#334155">Dark mode</button>
+  </div>
 
   <div class="card">
     <label>VIN</label>
@@ -85,15 +52,20 @@
   </div>
 
   <div class="card">
-    <div class="section-title">Carfax</div>
+    <div class="muted" style="text-transform:uppercase; letter-spacing:.12em">Carfax</div>
     <h3 style="margin-top:6px">Upload Carfax PDF</h3>
-    <div class="row"><input type="file" id="carfax" accept="application/pdf,image/*"/> <button onclick="uploadCarfax()">Upload</button> <button onclick="ocrLocal()" title="OCR scanned PDF or image">OCR scanned PDF</button> <div class="spinner" id="carfaxSpin"></div></div>
-<div id="carfaxUrl" class="muted"></div>
-<div id="carfaxSummaryBox"></div>
-<details style="margin-top:12px"><summary class="muted">Paste Carfax text (if your PDF is scanned)</summary>
-<textarea id="carfaxPaste" rows="6" style="width:100%" placeholder="Paste Carfax text here..."></textarea>
-<div class="row"><button onclick="summarizeCarfaxText()">Summarize Text</button><div class="muted">This uses the same extractor (no cost).</div></div>
-</details>
+    <div class="row">
+      <input type="file" id="carfax" accept="application/pdf,image/*"/>
+      <button onclick="uploadCarfax()">Upload</button>
+      <button onclick="ocrLocal()" title="OCR scanned PDF or image">OCR scanned PDF</button>
+      <div class="spinner" id="carfaxSpin" style="display:none"></div>
+    </div>
+    <div id="carfaxUrl" class="muted"></div>
+    <div id="carfaxSummaryBox"></div>
+    <details style="margin-top:12px"><summary class="muted">Paste Carfax text (if your PDF is scanned)</summary>
+      <textarea id="carfaxPaste" rows="6" style="width:100%" placeholder="Paste Carfax text here..."></textarea>
+      <div class="row"><button onclick="summarizeCarfaxText()">Summarize Text</button></div>
+    </details>
   </div>
 
   <div class="card">
@@ -108,30 +80,17 @@
         <input id="costLabel" placeholder="e.g., Tires, Windshield, Brakes">
         <input type="number" id="costAmount" min="0" step="1" placeholder="Amount">
         <button onclick="addCost()">Add</button>
-        <div style="margin-top:6px">
-          Quick add: 
-          <button onclick="quick('Tires',800)">Tires</button>
-          <button onclick="quick('Windshield',350)">Windshield</button>
-          <button onclick="quick('Detailing',150)">Detailing</button>
-        </div>
       </div>
     </div>
     <table style="width:100%; margin-top:10px; border-collapse:collapse">
       <thead><tr><th style="text-align:left">Item</th><th style="text-align:right">Cost ($)</th><th></th></tr></thead>
       <tbody id="costRows"></tbody>
       <tfoot>
-        <tr><td style="text-align:right; font-weight:bold">Additional Costs Total:</td>
-            <td style="text-align:right; font-weight:bold" id="costTotal">$0</td><td></td></tr>
-        <tr><td style="text-align:right; font-weight:bold">Hidden Maintenance:</td>
-            <td style="text-align:right; font-weight:bold" id="hiddenMaintTotal">$0</td><td></td></tr>
-        <tr><td style="text-align:right; font-weight:bold">Grand Total:</td>
-            <td style="text-align:right; font-weight:bold" id="grandTotal">$0</td><td></td></tr>
+        <tr><td style="text-align:right; font-weight:bold">Additional Costs Total:</td><td style="text-align:right; font-weight:bold" id="costTotal">$0</td><td></td></tr>
+        <tr><td style="text-align:right; font-weight:bold">Hidden Maintenance:</td><td style="text-align:right; font-weight:bold" id="hiddenMaintTotal">$0</td><td></td></tr>
+        <tr><td style="text-align:right; font-weight:bold">Grand Total:</td><td style="text-align:right; font-weight:bold" id="grandTotal">$0</td><td></td></tr>
       </tfoot>
     </table>
-    <div class="row">
-      <button onclick="estimateCosts()">AI: Estimate Hidden Maintenance</button>
-      <button onclick="addUpcomingCosts()">Add Upcoming Maintenance to Costs</button>
-    </div>
   </div>
 
   <div class="card">
@@ -143,288 +102,90 @@
     <button onclick="makePdf()">Generate PDF</button>
   </div>
 
-  <p><a href="/appraisals.html">View recent appraisals</a></p>
-
   <script>
-    let valuation, history, maintenance, carfaxUrl, carfaxSummary, carfaxText;
-    let costItems = [];
-    let commonIssues = null;
+    let valuation, history, maintenance, carfaxUrl, carfaxSummary, carfaxText; 
+    let adjustedWholesale = null; let gapItems = [];
 
+    function toggleTheme(){ const root=document.body; const cur=root.getAttribute('data-theme')||'light'; const next=cur==='light'?'dark':'light'; root.setAttribute('data-theme',next); document.getElementById('themeBtn').textContent = next==='light'?'Dark mode':'Light mode'; }
     function money(n){ return '$' + Number(n||0).toLocaleString(); }
-    function vehicleBanner(d){
-      const y = d?.year || '—', make = d?.make || '—', model = d?.model || '—', trim = d?.trim || '';
-      const label = [y, make, model, trim].filter(Boolean).join(' ');
-      const miles = document.getElementById('mileage')?.value || '';
-      return `<div class=\"card\" style=\"padding:14px; background: var(--surface); border:2px solid var(--accent)\"><strong style=\"font-size:18px\">${label}</strong>${d?.bodyClass ? ` · ${d.bodyClass}` : ''}${miles?` · ${Number(miles).toLocaleString()} mi`:''}</div>`;
-    }
+    function vehicleBanner(d){ const y=d?.year||'—', make=d?.make||'—', model=d?.model||'—', trim=d?.trim||''; const label=[y,make,model,trim].filter(Boolean).join(' '); const miles=document.getElementById('mileage')?.value||''; return `<div class="card" style="padding:14px; background: var(--surface); border:2px solid var(--accent)"><strong style="font-size:18px">${label}</strong>${d?.bodyClass?` · ${d.bodyClass}`:''}${miles?` · ${Number(miles).toLocaleString()} mi`:''}</div>`; }
+
     function valueBox(v){
       const w = (v && v.wholesale!==undefined) ? money(v.wholesale) : '—';
       const r = (v && v.retail!==undefined) ? money(v.retail) : '—';
-      return `<div>
-        <h4>Value</h4>
-        <div class="card" style="padding:8px">
-          <div class="stat"><span><strong>Wholesale</strong></span><span>${w}</span></div>
-          <div class="stat"><span><strong>Retail</strong></span><span>${r}</span></div>
-        </div>
-        <details class="muted" style="margin-top:8px"><summary>Raw valuation data</summary><pre>${JSON.stringify(v, null, 2)}</pre></details>
-      </div>`;
+      const adjRow = (adjustedWholesale!=null) ? `<div class="stat"><span><strong>Maintenance deduction</strong></span><span>-$${gapItems.reduce((s,it)=>s+Number(it.amount||0),0).toLocaleString()}</span></div><div class="stat"><span><strong>Wholesale (after gaps)</strong></span><span>$${Number(adjustedWholesale||0).toLocaleString()}</span></div>` : '';
+      return `<div><h4>Value</h4><div class="card" style="padding:8px"><div class="stat"><span><strong>Wholesale</strong></span><span>${w}</span></div><div class="stat"><span><strong>Retail</strong></span><span>${r}</span></div>${adjRow}</div><div class="row"><button onclick="applyMaintenanceDeduction()">Apply Carfax Maintenance Deduction</button></div><details class="muted" style="margin-top:8px"><summary>Raw valuation data</summary><pre>${JSON.stringify(v, null, 2)}</pre></details></div>`;
     }
-    function historyBox(h){
-      const acc    = (h && h.accidents != null)      ? h.accidents      : '—';
-      const owners = (h && h.owners != null)         ? h.owners         : '—';
-      const svc    = (h && h.serviceRecords != null) ? h.serviceRecords : '—';
-      return `<div>
-        <h4>History</h4>
-        <div class="card" style="padding:8px">
-          <div class="stat"><span><strong>Accidents</strong></span><span>${acc}</span></div>
-          <div class="stat"><span><strong>Owners</strong></span><span>${owners}</span></div>
-          <div class="stat"><span><strong>Service Records</strong></span><span>${svc}</span></div>
-        </div>
-        <details class="muted" style="margin-top:8px"><summary>Raw history data</summary><pre>${JSON.stringify(h, null, 2)}</pre></details>
-      </div>`;
-    }
-    function maintenanceBox(m){
-      const up = (m && Array.isArray(m.upcoming)) ? m.upcoming.map(x=>`<li>${x}</li>`).join('') : '<li>—</li>';
-      const intervals = (m && m.intervals) ? Object.entries(m.intervals).map(([k,v])=>`<li><strong>${k}:</strong> ${v}</li>`).join('') : '';
-      const common = (commonIssues && commonIssues.issues && commonIssues.issues.length)
-        ? ('<div style="margin-top:8px"><strong>Common Issues</strong><ul style="margin:6px 0 0 18px">' +
-           commonIssues.issues.map(it=>`<li>${it.title}${it.details?(' — '+it.details):''}</li>`).join('') + '</ul>' +
-           (commonIssues.notes ? `<div class="muted" style="margin-top:6px">${commonIssues.notes}</div>` : '') +
-           '</div>')
-        : '<div class="muted" style="margin-top:8px">Common issues: (click "Get Common Issues")</div>';
-      return `<div>
-        <h4>Maintenance</h4>
-        <div class="card" style="padding:8px">
-          <div class="row" style="justify-content:space-between; align-items:center">
-            <div><strong>Upcoming</strong></div>
-            <button onclick="getCommonIssues()">Get Common Issues</button>
-          </div>
-          <ul style="margin:6px 0 0 18px">${up}</ul>
-          ${intervals ? `<div style="margin-top:8px"><strong>Intervals</strong><ul style="margin:6px 0 0 18px">${intervals}</ul></div>` : ''}
-          ${common}
-        </div>
-        <details class="muted" style="margin-top:8px"><summary>Raw maintenance data</summary><pre>${JSON.stringify(m, null, 2)}</pre></details>
-      </div>`;
-    }
+    function historyBox(h){ const acc=(h&&h.accidents!=null)?h.accidents:'—', owners=(h&&h.owners!=null)?h.owners:'—', svc=(h&&h.serviceRecords!=null)?h.serviceRecords:'—'; return `<div><h4>History</h4><div class="card" style="padding:8px"><div class="stat"><span><strong>Accidents</strong></span><span>${acc}</span></div><div class="stat"><span><strong>Owners</strong></span><span>${owners}</span></div><div class="stat"><span><strong>Service Records</strong></span><span>${svc}</span></div></div><details class="muted" style="margin-top:8px"><summary>Raw history data</summary><pre>${JSON.stringify(h, null, 2)}</pre></details></div>`; }
+    function maintenanceBox(m){ const up=(m&&Array.isArray(m.upcoming))?m.upcoming.map(x=>`<li>${x}</li>`).join(''):'<li>—</li>'; const intervals=(m&&m.intervals)?Object.entries(m.intervals).map(([k,v])=>`<li><strong>${k}:</strong> ${v}</li>`).join(''):''; return `<div><h4>Maintenance</h4><div class="card" style="padding:8px"><div class="row" style="justify-content:space-between; align-items:center"><div><strong>Upcoming</strong></div><button onclick="getCommonIssues()">Get Common Issues</button></div><ul style="margin:6px 0 0 18px">${up}</ul>${intervals?`<div style="margin-top:8px"><strong>Intervals</strong><ul style="margin:6px 0 0 18px">${intervals}</ul></div>`:''}</div><details class="muted" style="margin-top:8px"><summary>Raw maintenance data</summary><pre>${JSON.stringify(m, null, 2)}</pre></details></div>`; }
 
-    async function lookup() {
-      const vin = document.getElementById('vin').value.trim();
-      if (!vin) return alert('Enter a VIN');
-
-      // 1) Decode VIN first
-      let decoded = null;
-      try {
-        decoded = await fetch(`/api/vin/${encodeURIComponent(vin)}`).then(r=>r.json());
-        if (decoded && decoded.ok) {
-          document.getElementById('decodedBanner').innerHTML = vehicleBanner(decoded);
-          const vField = document.getElementById('vehicle');
-          if (vField && !vField.value.trim()) {
-            const parts = [decoded.year, decoded.make, decoded.model, decoded.trim].filter(Boolean);
-            vField.value = parts.join(' ');
-          }
-        } else {
-          document.getElementById('decodedBanner').innerHTML = '<div class="muted">VIN decode unavailable</div>';
-        }
-      } catch(e) {
-        document.getElementById('decodedBanner').innerHTML = '<div class="muted">VIN decode failed</div>';
-      }
-
-      // 2) Load value/history/maintenance
-      const miles = Number(document.getElementById('mileage').value || 0);
-      const yr = (decoded && decoded.ok) ? Number(decoded.year||0) : 0;
-      const v = await fetch(`/api/value/${vin}?mileage=${encodeURIComponent(miles)}&year=${encodeURIComponent(yr)}`).then(r=>r.json());
-      const h = await fetch(`/api/history/${vin}`).then(r=>r.json());
-      const m = await fetch(`/api/maintenance/${vin}`).then(r=>r.json());
-      valuation = v; history = h; maintenance = m;
+    async function lookup(){
+      const vin=document.getElementById('vin').value.trim(); if(!vin) return alert('Enter a VIN');
+      let decoded=null; try{ decoded=await fetch(`/api/vin/${encodeURIComponent(vin)}`).then(r=>r.json()); if(decoded&&decoded.ok){ window._decodedYear=Number(decoded.year||0); document.getElementById('decodedBanner').innerHTML = vehicleBanner(decoded); const vField=document.getElementById('vehicle'); if(vField && !vField.value.trim()){ vField.value=[decoded.year,decoded.make,decoded.model,decoded.trim].filter(Boolean).join(' ');} } else { document.getElementById('decodedBanner').innerHTML='<div class="muted">VIN decode unavailable</div>'; } }catch(e){ document.getElementById('decodedBanner').innerHTML='<div class="muted">VIN decode failed</div>'; }
+      const miles=Number(document.getElementById('mileage').value||0); const yr=(decoded&&decoded.ok)?Number(decoded.year||0):0;
+      const v=await fetch(`/api/value/${vin}?mileage=${encodeURIComponent(miles)}&year=${encodeURIComponent(yr)}`).then(r=>r.json());
+      const h=await fetch(`/api/history/${vin}`).then(r=>r.json()); const m=await fetch(`/api/maintenance/${vin}`).then(r=>r.json());
+      valuation=v; history=h; maintenance=m; adjustedWholesale=null; gapItems=[];
       document.getElementById('results').innerHTML = valueBox(v)+historyBox(h)+maintenanceBox(m);
-      recalcTotals();
+    }
+
+    async function uploadCarfax(){
+      const file=document.getElementById('carfax').files[0]; if(!file) return alert('Choose a PDF first');
+      const fd=new FormData(); fd.append('file', file); document.getElementById('carfaxSpin').style.display='inline-block';
+      const res=await fetch('/api/carfax/upload',{method:'POST',body:fd}).then(r=>r.json()).catch(()=>null);
+      document.getElementById('carfaxSpin').style.display='none';
+      if(!res){ alert('Upload failed'); return; }
+      if(res.url){ carfaxUrl=res.url; document.getElementById('carfaxUrl').innerHTML=`Uploaded: <a href="${res.url}" target="_blank">${res.url}</a>`; }
+      carfaxSummary=res.summary; carfaxText=res.text;
+      if(carfaxSummary && !carfaxSummary.note){ document.getElementById('carfaxSummaryBox').innerHTML = carfaxBox(carfaxSummary); }
+      else { document.getElementById('carfaxSummaryBox').innerHTML = `<div class="card"><strong>Carfax Summary</strong><div class="muted">No text extracted from PDF. Use <b>OCR scanned PDF</b> or paste the text below.</div></div>`; }
     }
 
     async function ocrLocal(){
-      const file = document.getElementById('carfax').files[0];
-      if (!file) return alert('Choose a PDF or image first');
-      const isPdf = /pdf$/i.test(file.type) || /\.pdf$/i.test(file.name);
-      try {
-        document.getElementById('carfaxSummaryBox').innerHTML = '<div class="muted">OCR in progress… this can take a minute.</div>';
-        let text = '';
-        if (!isPdf) {
-          // Image → OCR
-          const imgURL = URL.createObjectURL(file);
-          const { data: { text: ocrText } } = await Tesseract.recognize(imgURL, 'eng', { logger: m => {} });
-          text = ocrText;
-          URL.revokeObjectURL(imgURL);
-        } else {
-          // PDF → render pages via pdf.js then OCR each page
-          const arrayBuf = await file.arrayBuffer();
-          const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
-          const maxPages = Math.min(pdf.numPages, 5); // first 5 pages for speed
-          for (let p = 1; p <= maxPages; p++) {
-            const page = await pdf.getPage(p);
-            const viewport = page.getViewport({ scale: 1.5 });
-            const canvas = document.createElement('canvas');
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-            const ctx = canvas.getContext('2d');
-            await page.render({ canvasContext: ctx, viewport }).promise;
-            const { data: { text: otext } } = await Tesseract.recognize(canvas, 'eng', { logger: m => {} });
-            text += '\\n\\n' + otext;
-          }
-        }
-        if (!text.trim()) { document.getElementById('carfaxSummaryBox').innerHTML = '<div class="muted">OCR returned no text.</div>'; return; }
-        const res = await fetch('/api/carfax/summarize-text', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rawText: text }) }).then(r=>r.json());
-        if (res.ok) { carfaxSummary = res.summary; document.getElementById('carfaxSummaryBox').innerHTML = carfaxBox(carfaxSummary); }
-        else { document.getElementById('carfaxSummaryBox').innerHTML = '<div class="muted">Failed to summarize OCR text.</div>'; }
-      } catch (e) {
-        console.error(e);
-        document.getElementById('carfaxSummaryBox').innerHTML = '<div class="muted">OCR failed.</div>';
-      }
-    }
-    async function uploadCarfax() {
-      const file = document.getElementById('carfax').files[0];
-      if (!file) return alert('Choose a PDF first');
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch('/api/carfax/upload', { method: 'POST', body: fd }).then(r=>r.json());
-      if (res.url) {
-        carfaxUrl = res.url;
-        carfaxSummary = res.summary;
-        carfaxText = res.text;
-        document.getElementById('carfaxUrl').innerHTML = `<a href="${res.url}" target="_blank">Uploaded: ${res.url}</a>`;
-        document.getElementById('carfaxSummaryBox').innerHTML = carfaxBox(carfaxSummary);
-      } else {
-        alert('Upload failed');
-      }
+      const file=document.getElementById('carfax').files[0]; if(!file) return alert('Choose a PDF or image first');
+      const isPdf=/pdf$/i.test(file.type) || /\.pdf$/i.test(file.name);
+      try{
+        document.getElementById('carfaxSummaryBox').innerHTML='<div class="muted">OCR in progress…</div>';
+        let text='';
+        if(!isPdf){ const imgURL=URL.createObjectURL(file); const {data:{text:ocrText}}=await Tesseract.recognize(imgURL,'eng'); text=ocrText; URL.revokeObjectURL(imgURL); }
+        else { const arrayBuf=await file.arrayBuffer(); const pdf=await pdfjsLib.getDocument({data:arrayBuf}).promise; const maxPages=Math.min(pdf.numPages,5); for(let p=1;p<=maxPages;p++){ const page=await pdf.getPage(p); const viewport=page.getViewport({scale:1.5}); const canvas=document.createElement('canvas'); canvas.width=viewport.width; canvas.height=viewport.height; const ctx=canvas.getContext('2d'); await page.render({canvasContext:ctx,viewport}).promise; const {data:{text:otext}}=await Tesseract.recognize(canvas,'eng'); text+='\\n\\n'+otext; } }
+        if(!text.trim()){ document.getElementById('carfaxSummaryBox').innerHTML='<div class="muted">OCR returned no text.</div>'; return; }
+        const res=await fetch('/api/carfax/summarize-text',{method:'POST',headers:{'Content-Type':'application/json'}, body:JSON.stringify({rawText:text})}).then(r=>r.json());
+        if(res.ok){ carfaxSummary=res.summary; document.getElementById('carfaxSummaryBox').innerHTML=carfaxBox(carfaxSummary); } else { document.getElementById('carfaxSummaryBox').innerHTML='<div class="muted">Failed to summarize OCR text.</div>'; }
+      }catch(e){ console.error(e); document.getElementById('carfaxSummaryBox').innerHTML='<div class="muted">OCR failed.</div>'; }
     }
 
     function carfaxBox(s){
-      if (!s) return '';
-      const items = Object.entries(s).filter(([k,v]) => k !== 'note' && v && ((Array.isArray(v) && v.length) || (!Array.isArray(v))));
-      if (items.length === 0) return '<div class="card"><em>No summary extracted.</em></div>';
-      const html = items.map(([k,v]) => {
-        const val = Array.isArray(v) ? v.join(', ') : String(v);
-        return `<div class="stat"><span><strong>${k}</strong></span><span>${val}</span></div>`;
-      }).join('');
-      return `<div class=\"card\" style=\"margin-top:8px\"><div class=\"section-title\">CARFAX</div><h3 style=\"margin-top:6px\">Summary</h3>${html}</div>`;
+      if(!s) return '';
+      const items=Object.entries(s).filter(([k,v]) => k!=='note' && v && ((Array.isArray(v)&&v.length) || (!Array.isArray(v))));
+      if(items.length===0) return '<div class="card"><em>No summary extracted.</em></div>';
+      const html=items.map(([k,v])=>`<div class="stat"><span><strong>${k}</strong></span><span>${Array.isArray(v)?v.join(', '):String(v)}</span></div>`).join('');
+      return `<div class="card" style="margin-top:8px"><div class="muted" style="text-transform:uppercase; letter-spacing:.12em">Carfax</div><h3 style="margin-top:6px">Summary</h3>${html}</div>`;
     }
 
-    function formatMoney(n){ return '$' + (Number(n||0)).toLocaleString(); }
-    function renderCosts(){
-      const rows = costItems.map((it, i)=>`<tr>
-          <td>${it.label}</td>
-          <td style="text-align:right">${formatMoney(it.amount)}</td>
-          <td><button onclick="removeCost(${i})">Remove</button></td>
-        </tr>`).join('');
-      document.getElementById('costRows').innerHTML = rows || '<tr><td colspan="3">No additional costs added.</td></tr>';
-    }
-    function recalcTotals(){
-      const addl = costItems.reduce((sum, it)=> sum + Number(it.amount||0), 0);
-      const hidden = Number(document.getElementById('hiddenMaint').value || 0);
-      document.getElementById('costTotal').innerText = formatMoney(addl);
-      document.getElementById('hiddenMaintTotal').innerText = formatMoney(hidden);
-      document.getElementById('grandTotal').innerText = formatMoney(addl + hidden);
-    }
-    function addCost(){
-      const label = document.getElementById('costLabel').value.trim();
-      const amount = Number(document.getElementById('costAmount').value || 0);
-      if (!label || !amount) return alert('Enter an item and amount');
-      costItems.push({ label, amount });
-      document.getElementById('costLabel').value='';
-      document.getElementById('costAmount').value='';
-      renderCosts(); recalcTotals();
-    }
-    function quick(label, amount){ costItems.push({ label, amount }); renderCosts(); recalcTotals(); }
+    function renderCosts(){ const rows=costItems.map((it,i)=>`<tr><td>${it.label}</td><td style="text-align:right">${money(it.amount)}</td><td><button onclick="removeCost(${i})">Remove</button></td></tr>`).join(''); document.getElementById('costRows').innerHTML = rows || '<tr><td colspan="3">No additional costs added.</td></tr>'; }
+    function recalcTotals(){ const addl=costItems.reduce((s,it)=>s+Number(it.amount||0),0); const hidden=Number(document.getElementById('hiddenMaint').value||0); document.getElementById('costTotal').innerText=money(addl); document.getElementById('hiddenMaintTotal').innerText=money(hidden); document.getElementById('grandTotal').innerText=money(addl+hidden); }
+    let costItems=[];
+    function addCost(){ const label=document.getElementById('costLabel').value.trim(); const amount=Number(document.getElementById('costAmount').value||0); if(!label||!amount) return alert('Enter an item and amount'); costItems.push({label,amount}); document.getElementById('costLabel').value=''; document.getElementById('costAmount').value=''; renderCosts(); recalcTotals(); }
     function removeCost(i){ costItems.splice(i,1); renderCosts(); recalcTotals(); }
 
-    async function estimateCosts() {
-      const vin = document.getElementById('vin').value.trim();
-      const vehicle = document.getElementById('vehicle').value.trim();
-      if (!vin) return alert('Enter a VIN first.');
-      const laborRate = 120;
-      const res = await fetch('/api/costs/ai-estimate', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ vin, vehicle, region: 'Kansas City, MO', laborRate, carfaxSummary, carfaxText })
-      }).then(r=>r.json());
-      if (!res.ok) return alert('AI estimate failed (missing API key or server error).');
-      const est = res.estimate || {};
-      const items = est.items || [];
-      items.forEach(it => costItems.push({ label: it.label, amount: Number(it.amount || 0) }));
-      renderCosts(); recalcTotals();
-      if (typeof est.hiddenMaintenanceCost === 'number') { document.getElementById('hiddenMaint').value = est.hiddenMaintenanceCost; recalcTotals(); }
-      if (est.notes) alert(est.notes);
-    }
-
-    async function addUpcomingCosts() {
-      if (!maintenance || !Array.isArray(maintenance.upcoming) || maintenance.upcoming.length === 0) {
-        return alert('No upcoming maintenance items to add.');
-      }
-      const vehicle = document.getElementById('vehicle').value.trim();
-      const res = await fetch('/api/maintenance/costs', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ upcoming: maintenance.upcoming, vehicle, region: 'Kansas City, MO', laborRate: 120 })
-      }).then(r=>r.json());
-      if (!res.ok) return alert('Failed to price upcoming items');
-      (res.items||[]).forEach(it => costItems.push({ label: it.label, amount: Number(it.amount||0) }));
-      renderCosts(); recalcTotals();
-    }
-
-    async function getCommonIssues() {
-      const vin = document.getElementById('vin').value.trim();
-      const vehicle = document.getElementById('vehicle').value.trim();
-      const res = await fetch('/api/maintenance/common-issues', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ vin, vehicle, carfaxSummary, carfaxText })
-      }).then(r=>r.json());
-      if (!res.ok) return alert('Failed to fetch common issues');
-      commonIssues = { issues: res.issues||[], notes: res.notes||'' };
+    async function getCommonIssues(){
+      const vin=document.getElementById('vin').value.trim(); const vehicle=document.getElementById('vehicle').value.trim();
+      const res=await fetch('/api/maintenance/common-issues',{method:'POST',headers:{'Content-Type':'application/json'}, body:JSON.stringify({ vin, vehicle, carfaxSummary, carfaxText })}).then(r=>r.json());
+      if(!res.ok) return alert('Failed to fetch common issues');
+      // Show inside Maintenance details by re-render
       document.getElementById('results').innerHTML = valueBox(valuation)+historyBox(history)+maintenanceBox(maintenance);
     }
 
-    async function saveAppraisal() {
-      const vin = document.getElementById('vin').value.trim();
-      if (!vin) return alert('Enter a VIN');
-      const vehicle = document.getElementById('vehicle').value.trim();
-      const notes = document.getElementById('notes').value.trim();
-      const reconItems = document.getElementById('recon').value.split(',').map(s=>s.trim()).filter(Boolean);
-      const hiddenMaintenanceCost = Number(document.getElementById('hiddenMaint').value || 0);
-      const body = { vin, mileage: Number(document.getElementById('mileage').value||0), vehicle, valuation, history, maintenance, commonIssues, notes, reconItems, carfaxUrl, carfaxSummary, hiddenMaintenanceCost, additionalCosts: costItems };
-      const res = await fetch('/api/appraisals', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
-      alert(res.ok ? 'Saved!' : 'Failed to save');
+    async function applyMaintenanceDeduction(){
+      if(!valuation) return alert('Run a VIN lookup first.');
+      const res=await fetch('/api/value/adjusted',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ baseWholesale:Number(valuation?.wholesale||0), carfaxSummary:carfaxSummary||{}, carfaxText:carfaxText||'', mileage:Number(document.getElementById('mileage').value||0), year:(window._decodedYear||0)||0, vehicle:document.getElementById('vehicle')?.value||'' })}).then(r=>r.json());
+      if(!res.ok) return alert('Could not calculate maintenance deduction');
+      adjustedWholesale=res.adjustedWholesale; gapItems=res.items||[]; document.getElementById('results').innerHTML = valueBox(valuation)+historyBox(history)+maintenanceBox(maintenance);
     }
 
-    async function makePdf() {
-      const vin = document.getElementById('vin').value.trim();
-      if (!vin) return alert('Enter a VIN');
-      const vehicle = document.getElementById('vehicle').value.trim();
-      const notes = document.getElementById('notes').value.trim();
-      const reconItems = document.getElementById('recon').value.split(',').map(s=>s.trim()).filter(Boolean);
-      const res = await fetch('/api/report', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ vin, mileage: Number(document.getElementById('mileage').value||0), vehicle, valuation, history, maintenance, commonIssues, notes, reconItems, carfaxUrl, carfaxSummary, hiddenMaintenanceCost: Number(document.getElementById('hiddenMaint').value||0), additionalCosts: costItems, dealer: { name: 'OpenSource Autos', address: '4801 Lamar Ave, Mission, KS 66202', phone: '(816) 807-8577', site: 'opensourceautos.com' } })
-      }).then(r=>r.json());
-      if (res.url) window.open(res.url, '_blank'); else alert('Failed to generate PDF');
-    }
-  
-    function toggleTheme(){
-      const root = document.body;
-      const current = root.getAttribute('data-theme') || 'dark';
-      const next = current === 'dark' ? 'light' : 'dark';
-      root.setAttribute('data-theme', next);
-      const btn = document.getElementById('themeBtn');
-      btn.textContent = next === 'dark' ? 'Light mode' : 'Dark mode';
-      btn.style.background = next === 'dark' ? '#334155' : '#0f172a';
-    }
-    function openPaste(){
-      const det = document.querySelector('details');
-      if (det && !det.open) det.open = true;
-      const ta = document.getElementById('carfaxPaste');
-      if (ta) ta.focus();
-      window.scrollTo({ top: det.offsetTop - 40, behavior: 'smooth' });
-    }
-</script>
-
+    async function saveAppraisal(){ const vin=document.getElementById('vin').value.trim(); if(!vin) return alert('Enter a VIN'); const vehicle=document.getElementById('vehicle').value.trim(); const notes=document.getElementById('notes').value.trim(); const reconItems=document.getElementById('recon').value.split(',').map(s=>s.trim()).filter(Boolean); const hiddenMaintenanceCost=Number(document.getElementById('hiddenMaint').value||0); const body={ vin, mileage:Number(document.getElementById('mileage').value||0), vehicle, valuation, history, maintenance, notes, reconItems, carfaxUrl, carfaxSummary, hiddenMaintenanceCost, additionalCosts: costItems }; const res=await fetch('/api/appraisals',{method:'POST',headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}).then(r=>r.json()); alert(res.ok?'Saved!':'Failed to save'); }
+    async function makePdf(){ const vin=document.getElementById('vin').value.trim(); if(!vin) return alert('Enter a VIN'); const vehicle=document.getElementById('vehicle').value.trim(); const notes=document.getElementById('notes').value.trim(); const reconItems=document.getElementById('recon').value.split(',').map(s=>s.trim()).filter(Boolean); const res=await fetch('/api/report',{method:'POST',headers:{'Content-Type':'application/json'}, body:JSON.stringify({ vin, mileage:Number(document.getElementById('mileage').value||0), vehicle, valuation, history, maintenance, notes, reconItems, carfaxUrl, carfaxSummary, hiddenMaintenanceCost:Number(document.getElementById('hiddenMaint').value||0), additionalCosts: costItems, dealer:{ name:'OpenSource Autos', address:'4801 Lamar Ave, Mission, KS 66202', phone:'(816) 807-8577', site:'opensourceautos.com' } })}).then(r=>r.json()); if(res.url) window.open(res.url,'_blank'); else alert('Failed to generate PDF'); }
+  </script>
 </body>
 </html>
