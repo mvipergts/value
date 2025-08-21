@@ -247,11 +247,7 @@ app.get('/healthz', (_, res) => res.json({ ok:true }));
 
 app.listen(PORT, () => console.log(`Server running at http://0.0.0.0:${PORT}`));
 
-// ---------- Customer PDF (clean, branded, with maintenance deduction breakdown) ----------
-app.post('/api/report/customer', (req, res) => {
-  const { vin, vehicle='', valuation={}, adjustedWholesale=null, deduction=0, gapItems=[], carfaxSummary={}, carfaxUrl='', mileage=0 } = req.body || {};
-  const filePath = path.join(reportsDir, `${vin || 'customer'}_${Date.now()}.pdf`);
-  const doc = new PDFDocument({ margin: 40, size: 'LETTER' });
+
   const stream = fs.createWriteStream(filePath);
   doc.pipe(stream);
 
@@ -360,4 +356,210 @@ app.post('/api/report/customer', (req, res) => {
 
   doc.end();
   stream.on('finish', () => res.json({ ok:true, url:`/reports/${path.basename(filePath)}` }));
+});
+
+// ---------- Common issues (AI-backed; falls back to mock) ----------
+    const text = safeText(resp) || '{"issues":[]}';
+    const data = JSON.parse(text);
+    return res.json({ ok:true, ...data });
+  } catch (e) {
+    console.error('common-issues error', e);
+    res.status(500).json({ ok:false, error:'common_issues_failed' });
+  }
+});
+
+// ---------- Customer PDF (clean, branded, with maintenance deduction breakdown) ----------
+app.post('/api/report/customer', (req, res) => {
+  const { vin, vehicle='', valuation={}, adjustedWholesale=null, deduction=0, gapItems=[], carfaxSummary={}, carfaxUrl='', mileage=0, additionalCosts=[] } = req.body || {};
+  const filePath = path.join(reportsDir, `${vin || 'customer'}_${Date.now()}.pdf`);
+  const doc = new PDFDocument({ margin: 40, size: 'LETTER' });
+  const stream = fs.createWriteStream(filePath);
+  doc.pipe(stream);
+
+  // Palette
+  const brand = 'Used Car Project';
+  const cPrimary = '#2563EB';  // blue
+  const cGreen   = '#10B981';  // emerald
+  const cAmber   = '#F59E0B';  // amber
+  const cIndigo  = '#6366F1';  // indigo
+  const cText    = '#0F172A';
+  const cMuted   = '#475569';
+  const cRule    = '#E2E8F0';
+
+  // Header bar
+  doc.rect(40, 40, 532, 46).fill(cPrimary);
+  doc.fillColor('#FFFFFF').fontSize(16).text('Vehicle Appraisal (Customer Copy)', 50, 52, { width: 400 });
+  doc.fontSize(10).text(new Date().toLocaleString(), 50, 72);
+  doc.fillColor('#FFFFFF').fontSize(10).text(brand, 522, 52, { width: 40, align: 'right' });
+  doc.fillColor(cText);
+
+  // Vehicle banner
+  const bannerY = 100;
+  doc.roundedRect(40, bannerY, 532, 68, 8).strokeColor(cRule).lineWidth(1).stroke();
+  doc.fillColor(cText).fontSize(14).text(vehicle || 'Vehicle', 50, bannerY + 12, { width: 400 });
+  doc.fillColor(cMuted).fontSize(10).text(`VIN: ${vin || '—'}`, 50, bannerY + 36, { width: 260 });
+  if (mileage) doc.text(`Mileage: ${Number(mileage||0).toLocaleString()} mi`, 310, bannerY + 36, { width: 262, align: 'right' });
+  doc.fillColor(cText);
+
+  // Values
+  let y = bannerY + 84;
+  const colW = 260;
+  function card(x, y, w, h, title, accent) {
+    doc.roundedRect(x, y, w, h, 10).fillAndStroke(accent, cRule);
+    doc.fillColor('#FFFFFF').fontSize(11).text(title, x + 12, y + 10);
+    doc.fillColor(cText);
+    doc.roundedRect(x, y + 28, w, h - 28, 10).fill('#FFFFFF').strokeColor(cRule).stroke();
+  }
+  const wWholesale = valuation?.wholesale != null ? `$${Number(valuation.wholesale).toLocaleString()}` : '—';
+  const wRetail = valuation?.retail != null ? `$${Number(valuation.retail).toLocaleString()}` : '—';
+  const adj = (adjustedWholesale != null) ? `$${Number(adjustedWholesale).toLocaleString()}` : '—';
+  const ded = deduction ? `$${Number(deduction).toLocaleString()}` : '$0';
+
+  card(40, y, colW, 170, 'Valuation', cGreen);
+  doc.fontSize(11).fillColor(cText);
+  const LX = 40 + 14, LW = colW - 28;
+  const line = (k, v) => { doc.font('Helvetica-Bold').text(k, LX, doc.y + 6, { continued: true, width: LW/2 }); doc.font('Helvetica').text(v, LX + LW/2, doc.y - 14, { align: 'right', width: LW/2 }); };
+  doc.moveDown(1.2);
+  line('Retail', wRetail);
+  line('Wholesale', wWholesale);
+  line('Maint. deduction', `-${ded}`);
+  line('Wholesale (after gaps)', adj);
+
+  // Recon card
+  const reconTotal = (Array.isArray(additionalCosts) ? additionalCosts.reduce((s,it)=>s+Number(it.amount||0),0) : 0);
+  const targetBuy = (adjustedWholesale != null) ? Math.max(0, Number(adjustedWholesale) - reconTotal) : null;
+  card(312, y, colW, 170, 'Reconditioning Costs', cIndigo);
+  doc.fontSize(11).fillColor(cText);
+  const RX = 312 + 14, RW = colW - 28;
+  doc.text(' ', 312, y + 34);
+  line('Reconditioning total', `$${reconTotal.toLocaleString()}`);
+  line('Target purchase price', targetBuy != null ? `$${Number(targetBuy).toLocaleString()}` : '—');
+
+  y += 190;
+
+  // Maintenance deductions breakdown
+  const tableH = 160;
+  card(40, y, 532, tableH, 'Maintenance Deductions (Reasonable Estimates)', cAmber);
+  doc.text(' ', 40, y + 34);
+  const headerY = doc.y;
+  doc.fontSize(10).fillColor(cMuted).text('Item', 54, headerY, { width: 200 });
+  doc.text('Amount', 340, headerY, { width: 80, align: 'right' });
+  doc.text('Why', 430, headerY, { width: 130 });
+  doc.moveTo(50, headerY + 14).lineTo(560, headerY + 14).strokeColor(cRule).lineWidth(1).stroke();
+  doc.fillColor(cText);
+  let rowY = headerY + 18;
+  const rows = Array.isArray(gapItems) ? gapItems : [];
+  if (rows.length === 0) {
+    doc.text('No deductions applied.', 54, rowY);
+  } else {
+    rows.forEach((it, i) => {
+      const bg = (i % 2 === 0) ? '#F8FAFC' : '#FFFFFF';
+      doc.rect(44, rowY - 4, 520, 18).fill(bg);
+      doc.fillColor(cText).text(it.label || '', 54, rowY, { width: 200 });
+      doc.text(`$${Number(it.amount||0).toLocaleString()}`, 340, rowY, { width: 80, align:'right' });
+      doc.fillColor(cMuted).text(it.rationale || '', 430, rowY, { width: 130 });
+      rowY += 20;
+    });
+  }
+  doc.fillColor(cText);
+  doc.moveTo(50, rowY + 4).lineTo(560, rowY + 4).strokeColor(cRule).stroke();
+  doc.font('Helvetica-Bold').text('Total deduction', 54, rowY + 8, { width: 200 });
+  doc.font('Helvetica').text(ded, 340, rowY + 8, { width: 80, align:'right' });
+
+  // Footer
+  doc.fillColor(cMuted).fontSize(9);
+  if (carfaxUrl) doc.text(`Carfax: ${carfaxUrl}`, 40, 740, { link: carfaxUrl, underline: true });
+  doc.text('Estimates are for guidance only and not an official offer. Values depend on inspection/condition.', 40, 752);
+
+  doc.end();
+  stream.on('finish', () => res.json({ ok:true, url:`/reports/${path.basename(filePath)}` }));
+});
+
+// ---------- Common issues (NHTSA + optional web search; NO OpenAI required) ----------
+app.post('/api/maintenance/common-issues', async (req, res) => {
+  try {
+    const { vin='', vehicle='' } = req.body || {};
+    // Try to parse "2015 HONDA Accord ..." from vehicle banner
+    let year = null, make = null, model = null;
+    try {
+      const parts = (vehicle||'').split(/\s+/);
+      const y = parseInt(parts[0], 10);
+      if (!isNaN(y)) { year = y; make = parts[1] || null; model = parts[2] || null; }
+    } catch {}
+    // If not parsed, decode VIN to get make/model/year
+    if ((!year || !make || !model) && vin){
+      try {
+        const r = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`);
+        const j = await r.json();
+        const row = j?.Results?.[0] || {};
+        year = year || parseInt(row.ModelYear, 10) || null;
+        make = make || row.Make || null;
+        model = model || row.Model || null;
+      } catch {}
+    }
+
+    // Helper to fetch safely
+    async function getJSON(url){
+      try { const r = await fetch(url, { timeout: 12000 }); return await r.json(); }
+      catch(e){ return null; }
+    }
+
+    // NHTSA: Recalls + Complaints (ODI)
+    let recalls = [];
+    let complaints = [];
+    if (make && model && year){
+      const rec = await getJSON(`https://api.nhtsa.gov/recalls/recallsByVehicle?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&modelYear=${encodeURIComponent(year)}`);
+      if (rec && rec.results) recalls = rec.results;
+
+      const cmp = await getJSON(`https://api.nhtsa.gov/Complaints/ByVehicle?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&modelYear=${encodeURIComponent(year)}`);
+      if (cmp && cmp.results) complaints = cmp.results;
+    }
+
+    // Heuristic keyword bucketing from complaint component/summary
+    const buckets = [
+      { key:'engine', label:'Engine / Oil consumption' },
+      { key:'trans', label:'Transmission' },
+      { key:'brake', label:'Brakes' },
+      { key:'air bag', label:'Airbags / SRS' },
+      { key:'electr', label:'Electrical' },
+      { key:'steering', label:'Steering' },
+      { key:'susp', label:'Suspension' },
+      { key:'fuel', label:'Fuel system' },
+      { key:'ac', label:'HVAC / A/C' },
+      { key:'paint', label:'Paint / Exterior' },
+    ];
+    const counts = new Map();
+    complaints.forEach(c => {
+      const txt = `${c?.component || ''} ${c?.summary || ''} ${c?.narrative || ''}`.toLowerCase();
+      buckets.forEach(b => {
+        if (txt.includes(b.key)) counts.set(b.label, (counts.get(b.label)||0)+1);
+      });
+    });
+    const top = Array.from(counts.entries()).sort((a,b)=>b[1]-a[1]).slice(0,6);
+    const issues = top.map(([label,count]) => ({ title: label, details: `${count} complaint(s) in NHTSA database` }));
+
+    const noteParts = [];
+    if (recalls.length) noteParts.push(`${recalls.length} active/archived recall(s)`);
+    if (!issues.length && complaints.length) noteParts.push(`${complaints.length} complaints found (varied components)`);
+    const note = noteParts.join(' · ') || 'Data from NHTSA ODI (public).';
+
+    // Optional: Web search (SERPAPI)
+    const SERP_API_KEY = process.env.SERP_API_KEY || '';
+    if (SERP_API_KEY && make && model) {
+      try {
+        const q = `${year||''} ${make} ${model} common problems`;
+        const resp = await fetch(`https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(q)}&num=5&api_key=${SERP_API_KEY}`);
+        const data = await resp.json();
+        const snippets = (data?.organic_results || []).map(r => r.snippet || '').join(' ').toLowerCase();
+        const add = [];
+        buckets.forEach(b => { if (snippets.includes(b.key)) add.push(b.label); });
+        add.slice(0,3).forEach(lbl => { if (!issues.find(i => i.title === lbl)) issues.push({ title: lbl, details: 'Mentioned across top web results' }); });
+      } catch {}
+    }
+
+    res.json({ ok:true, issues, note, source: 'nhtsa+web' });
+  } catch (e) {
+    console.error('common-issues (nhtsa) error', e);
+    res.status(500).json({ ok:false, error:'common_issues_failed' });
+  }
 });

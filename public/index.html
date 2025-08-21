@@ -27,6 +27,64 @@
     else alert('Could not generate PDF');
   }
 
+
+    let costItems = [];
+    function money(n){ return '$'+Number(n||0).toLocaleString(); }
+    function quickAdd(label, amount){ costItems.push({label, amount}); renderCosts(); }
+    function addCost(){
+      const label = (document.getElementById('costLabel').value||'').trim();
+      const amount = Number(document.getElementById('costAmount').value||0);
+      if(!label || !amount){ alert('Enter an item and amount'); return; }
+      costItems.push({label, amount}); document.getElementById('costLabel').value=''; document.getElementById('costAmount').value='';
+      renderCosts();
+    }
+    function removeCost(i){ costItems.splice(i,1); renderCosts(); }
+    function renderCosts(){
+      const rows = costItems.map((it,i)=>`<tr><td>${it.label}</td><td style="text-align:right">${money(it.amount)}</td><td><button class="btn secondary" onclick="removeCost(${i})">Remove</button></td></tr>`).join('');
+      document.getElementById('costRows').innerHTML = rows || '<tr><td colspan="3" class="muted">No additional costs added.</td></tr>';
+      const total = costItems.reduce((s,it)=>s+Number(it.amount||0),0);
+      document.getElementById('reconTotal').innerText = money(total);
+      // Rerender value card (to update target max buy)
+      if (window.valuation) document.getElementById('results').innerHTML = valueBox(valuation) + historyBox(history) + maintenanceBox(maintenance);
+    }
+
+    async function fetchCommonIssues(){
+      const vin = document.getElementById('vin').value.trim();
+      const vehicle = document.getElementById('decodedBanner').innerText.trim();
+      const res = await fetch('/api/maintenance/common-issues', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle, carfaxSummary: carfaxSummary||{}, carfaxText: carfaxText||'' }) }).then(r=>r.json());
+      if (!res || !res.ok){ alert('Could not fetch common issues'); return; }
+      const issues = res.issues || [];
+      const note = res.note || '';
+      if (note){ const callout = document.getElementById('commonIssuesCallout'); document.getElementById('commonNote').innerText = note; callout.style.display='block'; }
+      // Append issues list under maintenance intervals
+      const listHtml = issues.map(i => `<li><strong>${i.title}</strong>${i.details?(' — ' + i.details):''}</li>`).join('');
+      const maintCard = document.querySelector('.card.card-maint');
+      const ul = document.createElement('ul'); ul.innerHTML = listHtml;
+      maintCard.appendChild(ul);
+    }
+
+    // Update print payload to include additional costs
+    const _origPrint = printCustomerPDF;
+    printCustomerPDF = async function(){
+      const vin = document.getElementById('vin').value.trim();
+      if (!vin) return alert('Enter a VIN first');
+      const miles = Number(document.getElementById('mileage').value||0);
+      let vehicle = '';
+      try { const b = document.getElementById('decodedBanner').innerText.trim(); if (b) vehicle = b.replace(/\s+/g, ' '); } catch {}
+      const body = {
+        vin, vehicle, mileage: miles,
+        valuation: valuation || {},
+        adjustedWholesale: (typeof adjustedWholesale === 'number') ? adjustedWholesale : null,
+        deduction: Array.isArray(gapItems)? gapItems.reduce((s,it)=>s+Number(it.amount||0),0) : 0,
+        gapItems: gapItems || [],
+        carfaxSummary: carfaxSummary || {},
+        carfaxUrl: carfaxUrl || '',
+        additionalCosts: costItems || []
+      };
+      const res = await fetch('/api/report/customer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
+      if (res && res.url) window.open(res.url, '_blank'); else alert('Could not generate PDF');
+    }
+
 </script>
   <script>pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
   async function printCustomerPDF(){
@@ -50,6 +108,64 @@
     else alert('Could not generate PDF');
   }
 
+
+    let costItems = [];
+    function money(n){ return '$'+Number(n||0).toLocaleString(); }
+    function quickAdd(label, amount){ costItems.push({label, amount}); renderCosts(); }
+    function addCost(){
+      const label = (document.getElementById('costLabel').value||'').trim();
+      const amount = Number(document.getElementById('costAmount').value||0);
+      if(!label || !amount){ alert('Enter an item and amount'); return; }
+      costItems.push({label, amount}); document.getElementById('costLabel').value=''; document.getElementById('costAmount').value='';
+      renderCosts();
+    }
+    function removeCost(i){ costItems.splice(i,1); renderCosts(); }
+    function renderCosts(){
+      const rows = costItems.map((it,i)=>`<tr><td>${it.label}</td><td style="text-align:right">${money(it.amount)}</td><td><button class="btn secondary" onclick="removeCost(${i})">Remove</button></td></tr>`).join('');
+      document.getElementById('costRows').innerHTML = rows || '<tr><td colspan="3" class="muted">No additional costs added.</td></tr>';
+      const total = costItems.reduce((s,it)=>s+Number(it.amount||0),0);
+      document.getElementById('reconTotal').innerText = money(total);
+      // Rerender value card (to update target max buy)
+      if (window.valuation) document.getElementById('results').innerHTML = valueBox(valuation) + historyBox(history) + maintenanceBox(maintenance);
+    }
+
+    async function fetchCommonIssues(){
+      const vin = document.getElementById('vin').value.trim();
+      const vehicle = document.getElementById('decodedBanner').innerText.trim();
+      const res = await fetch('/api/maintenance/common-issues', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle, carfaxSummary: carfaxSummary||{}, carfaxText: carfaxText||'' }) }).then(r=>r.json());
+      if (!res || !res.ok){ alert('Could not fetch common issues'); return; }
+      const issues = res.issues || [];
+      const note = res.note || '';
+      if (note){ const callout = document.getElementById('commonIssuesCallout'); document.getElementById('commonNote').innerText = note; callout.style.display='block'; }
+      // Append issues list under maintenance intervals
+      const listHtml = issues.map(i => `<li><strong>${i.title}</strong>${i.details?(' — ' + i.details):''}</li>`).join('');
+      const maintCard = document.querySelector('.card.card-maint');
+      const ul = document.createElement('ul'); ul.innerHTML = listHtml;
+      maintCard.appendChild(ul);
+    }
+
+    // Update print payload to include additional costs
+    const _origPrint = printCustomerPDF;
+    printCustomerPDF = async function(){
+      const vin = document.getElementById('vin').value.trim();
+      if (!vin) return alert('Enter a VIN first');
+      const miles = Number(document.getElementById('mileage').value||0);
+      let vehicle = '';
+      try { const b = document.getElementById('decodedBanner').innerText.trim(); if (b) vehicle = b.replace(/\s+/g, ' '); } catch {}
+      const body = {
+        vin, vehicle, mileage: miles,
+        valuation: valuation || {},
+        adjustedWholesale: (typeof adjustedWholesale === 'number') ? adjustedWholesale : null,
+        deduction: Array.isArray(gapItems)? gapItems.reduce((s,it)=>s+Number(it.amount||0),0) : 0,
+        gapItems: gapItems || [],
+        carfaxSummary: carfaxSummary || {},
+        carfaxUrl: carfaxUrl || '',
+        additionalCosts: costItems || []
+      };
+      const res = await fetch('/api/report/customer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
+      if (res && res.url) window.open(res.url, '_blank'); else alert('Could not generate PDF');
+    }
+
 </script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js">
   async function printCustomerPDF(){
@@ -72,6 +188,64 @@
     if (res && res.url) window.open(res.url, '_blank');
     else alert('Could not generate PDF');
   }
+
+
+    let costItems = [];
+    function money(n){ return '$'+Number(n||0).toLocaleString(); }
+    function quickAdd(label, amount){ costItems.push({label, amount}); renderCosts(); }
+    function addCost(){
+      const label = (document.getElementById('costLabel').value||'').trim();
+      const amount = Number(document.getElementById('costAmount').value||0);
+      if(!label || !amount){ alert('Enter an item and amount'); return; }
+      costItems.push({label, amount}); document.getElementById('costLabel').value=''; document.getElementById('costAmount').value='';
+      renderCosts();
+    }
+    function removeCost(i){ costItems.splice(i,1); renderCosts(); }
+    function renderCosts(){
+      const rows = costItems.map((it,i)=>`<tr><td>${it.label}</td><td style="text-align:right">${money(it.amount)}</td><td><button class="btn secondary" onclick="removeCost(${i})">Remove</button></td></tr>`).join('');
+      document.getElementById('costRows').innerHTML = rows || '<tr><td colspan="3" class="muted">No additional costs added.</td></tr>';
+      const total = costItems.reduce((s,it)=>s+Number(it.amount||0),0);
+      document.getElementById('reconTotal').innerText = money(total);
+      // Rerender value card (to update target max buy)
+      if (window.valuation) document.getElementById('results').innerHTML = valueBox(valuation) + historyBox(history) + maintenanceBox(maintenance);
+    }
+
+    async function fetchCommonIssues(){
+      const vin = document.getElementById('vin').value.trim();
+      const vehicle = document.getElementById('decodedBanner').innerText.trim();
+      const res = await fetch('/api/maintenance/common-issues', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle, carfaxSummary: carfaxSummary||{}, carfaxText: carfaxText||'' }) }).then(r=>r.json());
+      if (!res || !res.ok){ alert('Could not fetch common issues'); return; }
+      const issues = res.issues || [];
+      const note = res.note || '';
+      if (note){ const callout = document.getElementById('commonIssuesCallout'); document.getElementById('commonNote').innerText = note; callout.style.display='block'; }
+      // Append issues list under maintenance intervals
+      const listHtml = issues.map(i => `<li><strong>${i.title}</strong>${i.details?(' — ' + i.details):''}</li>`).join('');
+      const maintCard = document.querySelector('.card.card-maint');
+      const ul = document.createElement('ul'); ul.innerHTML = listHtml;
+      maintCard.appendChild(ul);
+    }
+
+    // Update print payload to include additional costs
+    const _origPrint = printCustomerPDF;
+    printCustomerPDF = async function(){
+      const vin = document.getElementById('vin').value.trim();
+      if (!vin) return alert('Enter a VIN first');
+      const miles = Number(document.getElementById('mileage').value||0);
+      let vehicle = '';
+      try { const b = document.getElementById('decodedBanner').innerText.trim(); if (b) vehicle = b.replace(/\s+/g, ' '); } catch {}
+      const body = {
+        vin, vehicle, mileage: miles,
+        valuation: valuation || {},
+        adjustedWholesale: (typeof adjustedWholesale === 'number') ? adjustedWholesale : null,
+        deduction: Array.isArray(gapItems)? gapItems.reduce((s,it)=>s+Number(it.amount||0),0) : 0,
+        gapItems: gapItems || [],
+        carfaxSummary: carfaxSummary || {},
+        carfaxUrl: carfaxUrl || '',
+        additionalCosts: costItems || []
+      };
+      const res = await fetch('/api/report/customer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
+      if (res && res.url) window.open(res.url, '_blank'); else alert('Could not generate PDF');
+    }
 
 </script>
   <style>
@@ -170,7 +344,12 @@
         <div class="card" style="padding:8px">
           <div class="stat"><span><strong>Wholesale</strong></span><span>${w}</span></div>
           <div class="stat"><span><strong>Retail</strong></span><span>${r}</span></div>
-          ${adjRow}
+          ${adjRow}${(adjustedWholesale!=null) ? (()=>{ 
+          const totalRecon = (window.costItems||[]).reduce((s,it)=>s+Number(it.amount||0),0);
+          const target = Math.max(0, Number(adjustedWholesale||0) - totalRecon);
+          return `<div class='stat'><span><strong>Reconditioning total</strong></span><span>$${totalRecon.toLocaleString()}</span></div>
+                  <div class='stat'><span><strong>Target max buy</strong></span><span>$${target.toLocaleString()}</span></div>`;
+        })() : ''}
         </div>
         ${adjustedWholesale!=null ? gapBreakdown() : ''}
         <div><button class="btn full" onclick="applyMaintenanceDeduction()">Apply Maintenance Deduction (Carfax)</button></div>
@@ -178,7 +357,7 @@
       </div>`;
     }
     function historyBox(h){ const acc=h?.accidents??'—', owners=h?.owners??'—', svc=h?.serviceRecords??'—'; return `<div><h4 style="font-size:18px">History</h4><div class="card card-value" style="padding:12px"><div class="stat"><span><strong>Accidents</strong></span><span>${acc}</span></div><div class="stat"><span><strong>Owners</strong></span><span>${owners}</span></div><div class="stat"><span><strong>Service Records</strong></span><span>${svc}</span></div></div></div>`; }
-    function maintenanceBox(m){ const up=(m&&Array.isArray(m.upcoming))?m.upcoming.map(x=>`<li>${x}</li>`).join(''):'<li>—</li>'; const intervals=(m&&m.intervals)?Object.entries(m.intervals).map(([k,v])=>`<li><strong>${k}:</strong> ${v}</li>`).join(''):''; return `<div><h4 style="font-size:18px">Maintenance</h4><div class="card card-maint" style="padding:12px"><div><strong>Upcoming</strong></div><ul>${up}</ul><div style="margin-top:6px"><strong>Intervals</strong></div><ul>${intervals}</ul></div></div>`; }
+    function maintenanceBox(m){ const up=(m&&Array.isArray(m.upcoming))?m.upcoming.map(x=>`<li>${x}</li>`).join(''):'<li>—</li>'; const intervals=(m&&m.intervals)?Object.entries(m.intervals).map(([k,v])=>`<li><strong>${k}:</strong> ${v}</li>`).join(''):''; return `<div><h4 style="font-size:18px">Maintenance</h4><div class="card card-maint" style="padding:12px"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px"><div></div><button class="btn" onclick="fetchCommonIssues()">Get Common Issues</button></div><div id="commonIssuesCallout" style="display:none; border-left:4px solid #F59E0B; background:rgba(245,158,11,.07); padding:10px; border-radius:10px; margin-bottom:8px"><strong>Heads up:</strong> <span id="commonNote"></span></div><div><strong>Upcoming</strong></div><ul>${up}</ul><div style="margin-top:6px"><strong>Intervals</strong></div><ul>${intervals}</ul></div></div>`; }
 
     async function lookup(){
       const vin=document.getElementById('vin').value.trim(); if(!vin) return alert('Enter a VIN');
@@ -302,7 +481,92 @@
     else alert('Could not generate PDF');
   }
 
+
+    let costItems = [];
+    function money(n){ return '$'+Number(n||0).toLocaleString(); }
+    function quickAdd(label, amount){ costItems.push({label, amount}); renderCosts(); }
+    function addCost(){
+      const label = (document.getElementById('costLabel').value||'').trim();
+      const amount = Number(document.getElementById('costAmount').value||0);
+      if(!label || !amount){ alert('Enter an item and amount'); return; }
+      costItems.push({label, amount}); document.getElementById('costLabel').value=''; document.getElementById('costAmount').value='';
+      renderCosts();
+    }
+    function removeCost(i){ costItems.splice(i,1); renderCosts(); }
+    function renderCosts(){
+      const rows = costItems.map((it,i)=>`<tr><td>${it.label}</td><td style="text-align:right">${money(it.amount)}</td><td><button class="btn secondary" onclick="removeCost(${i})">Remove</button></td></tr>`).join('');
+      document.getElementById('costRows').innerHTML = rows || '<tr><td colspan="3" class="muted">No additional costs added.</td></tr>';
+      const total = costItems.reduce((s,it)=>s+Number(it.amount||0),0);
+      document.getElementById('reconTotal').innerText = money(total);
+      // Rerender value card (to update target max buy)
+      if (window.valuation) document.getElementById('results').innerHTML = valueBox(valuation) + historyBox(history) + maintenanceBox(maintenance);
+    }
+
+    async function fetchCommonIssues(){
+      const vin = document.getElementById('vin').value.trim();
+      const vehicle = document.getElementById('decodedBanner').innerText.trim();
+      const res = await fetch('/api/maintenance/common-issues', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle, carfaxSummary: carfaxSummary||{}, carfaxText: carfaxText||'' }) }).then(r=>r.json());
+      if (!res || !res.ok){ alert('Could not fetch common issues'); return; }
+      const issues = res.issues || [];
+      const note = res.note || '';
+      if (note){ const callout = document.getElementById('commonIssuesCallout'); document.getElementById('commonNote').innerText = note; callout.style.display='block'; }
+      // Append issues list under maintenance intervals
+      const listHtml = issues.map(i => `<li><strong>${i.title}</strong>${i.details?(' — ' + i.details):''}</li>`).join('');
+      const maintCard = document.querySelector('.card.card-maint');
+      const ul = document.createElement('ul'); ul.innerHTML = listHtml;
+      maintCard.appendChild(ul);
+    }
+
+    // Update print payload to include additional costs
+    const _origPrint = printCustomerPDF;
+    printCustomerPDF = async function(){
+      const vin = document.getElementById('vin').value.trim();
+      if (!vin) return alert('Enter a VIN first');
+      const miles = Number(document.getElementById('mileage').value||0);
+      let vehicle = '';
+      try { const b = document.getElementById('decodedBanner').innerText.trim(); if (b) vehicle = b.replace(/\s+/g, ' '); } catch {}
+      const body = {
+        vin, vehicle, mileage: miles,
+        valuation: valuation || {},
+        adjustedWholesale: (typeof adjustedWholesale === 'number') ? adjustedWholesale : null,
+        deduction: Array.isArray(gapItems)? gapItems.reduce((s,it)=>s+Number(it.amount||0),0) : 0,
+        gapItems: gapItems || [],
+        carfaxSummary: carfaxSummary || {},
+        carfaxUrl: carfaxUrl || '',
+        additionalCosts: costItems || []
+      };
+      const res = await fetch('/api/report/customer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
+      if (res && res.url) window.open(res.url, '_blank'); else alert('Could not generate PDF');
+    }
+
 </script>
+
+  
+  <div class="card" style="border-left:4px solid #10B981">
+    <div class="muted" style="text-transform:uppercase;letter-spacing:.12em">Reconditioning</div>
+    <h3 style="margin-top:6px">Add Additional Costs</h3>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px">
+      <button class="btn secondary" onclick="quickAdd('Tires (set)', 800)">+ Tires</button>
+      <button class="btn secondary" onclick="quickAdd('Windshield', 300)">+ Windshield</button>
+      <button class="btn secondary" onclick="quickAdd('Detail', 150)">+ Detail</button>
+      <button class="btn secondary" onclick="quickAdd('Inspection', 120)">+ Inspection</button>
+      <button class="btn secondary" onclick="quickAdd('Wheel alignment', 110)">+ Alignment</button>
+      <button class="btn secondary" onclick="quickAdd('Brakes (pads/rotors est.)', 450)">+ Brakes</button>
+      <button class="btn secondary" onclick="quickAdd('Battery', 180)">+ Battery</button>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+      <input id="costLabel" placeholder="Custom item (e.g., Headlight)">
+      <input id="costAmount" type="number" min="0" step="1" placeholder="Amount">
+      <button class="btn" onclick="addCost()">Add</button>
+    </div>
+    <table style="width:100%; margin-top:10px; border-collapse:collapse">
+      <thead><tr><th style="text-align:left">Item</th><th style="text-align:right">Cost ($)</th><th></th></tr></thead>
+      <tbody id="costRows"><tr><td colspan="3" class="muted">No additional costs added.</td></tr></tbody>
+      <tfoot>
+        <tr><td style="text-align:right; font-weight:bold">Reconditioning total:</td><td style="text-align:right; font-weight:bold" id="reconTotal">$0</td><td></td></tr>
+      </tfoot>
+    </table>
+  </div>
 
   <div class="card" style="border-left: 4px solid #2563EB">
     <h3>Reports</h3>
