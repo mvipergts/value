@@ -466,8 +466,37 @@ app.post('/api/report/customer', (req, res) => {
   doc.font('Helvetica-Bold').text('Total deduction', 54, rowY + 8, { width: 200 });
   doc.font('Helvetica').text(ded, 340, rowY + 8, { width: 80, align:'right' });
 
+
+  // Evidence summary (if provided through body.evidence)
+  try {
+    const ev = req.body && req.body.evidence ? req.body.evidence : null;
+    if (ev) {
+      let y2 = rowY + 38;
+      if (y2 < 540) y2 = 540;
+      // Evidence card
+      function card(x, y, w, h, title, accent) {
+        doc.roundedRect(x, y, w, h, 10).fillAndStroke(accent, cRule);
+        doc.fillColor('#FFFFFF').fontSize(11).text(title, x + 12, y + 10);
+        doc.fillColor(cText);
+        doc.roundedRect(x, y + 28, w, h - 28, 10).fill('#FFFFFF').strokeColor(cRule).stroke();
+      }
+      const cardH = 130;
+      card(40, y2, 532, cardH, 'Evidence Summary', cPrimary);
+      doc.text(' ', 40, y2 + 34);
+      const yy = doc.y;
+      doc.fontSize(10).fillColor(cText).text(`NHTSA Recalls: ${ev.counts?.recalls ?? 0}`, 54, yy);
+      doc.text(`Complaints: ${ev.counts?.complaints ?? 0}`, 200, yy);
+      doc.text(`TSBs: ${ev.counts?.tsbs ?? 0}`, 340, yy);
+      doc.moveTo(50, yy + 14).lineTo(560, yy + 14).strokeColor(cRule).lineWidth(1).stroke();
+      const risks = Array.isArray(ev.topRisks)?ev.topRisks.slice(0,4):[];
+      let ry = yy + 20;
+      risks.forEach(r => { doc.text(`• ${r.label} — score ${r.score} (${r.rationale})`, 54, ry, { width: 500 }); ry += 14; });
+    }
+  } catch(e){}
+
   // Footer
   doc.fillColor(cMuted).fontSize(9);
+
   if (carfaxUrl) doc.text(`Carfax: ${carfaxUrl}`, 40, 740, { link: carfaxUrl, underline: true });
   doc.text('Estimates are for guidance only and not an official offer. Values depend on inspection/condition.', 40, 752);
 
@@ -561,5 +590,204 @@ app.post('/api/maintenance/common-issues', async (req, res) => {
   } catch (e) {
     console.error('common-issues (nhtsa) error', e);
     res.status(500).json({ ok:false, error:'common_issues_failed' });
+  }
+});
+
+// ---------- Technical Service Bulletins (TSB) via DOT Socrata dataset (no key required) ----------
+app.post('/api/maintenance/tsb', async (req, res) => {
+  try {
+    const { vin='', vehicle='' } = req.body || {};
+
+    // Try to parse "2015 HONDA Accord ..." from vehicle banner
+    let year = null, make = null, model = null;
+    try {
+      const parts = (vehicle||'').split(/\s+/);
+      const y = parseInt(parts[0], 10);
+      if (!isNaN(y)) { year = y; make = parts[1] || null; model = parts[2] || null; }
+    } catch {}
+
+    // If not parsed, decode VIN to get make/model/year
+    if ((!year || !make || !model) && vin){
+      try {
+        const r = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`);
+        const j = await r.json();
+        const row = j?.Results?.[0] || {};
+        year = year || parseInt(row.ModelYear, 10) || null;
+        make = make || row.Make || null;
+        model = model || row.Model || null;
+      } catch {}
+    }
+    if (!year || !make || !model) return res.status(400).json({ ok:false, error:'need_year_make_model' });
+
+    // Query Socrata dataset (TSB summaries). Dataset ID: hczg-qbhf
+    const baseUrl = 'https://data.transportation.gov/resource/hczg-qbhf.json';
+    const url = `${baseUrl}?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&model_year=${encodeURIComponent(year)}&$limit=50`;
+    const headers = { 'Accept': 'application/json' };
+    if (process.env.SOCRATA_APP_TOKEN) headers['X-App-Token'] = process.env.SOCRATA_APP_TOKEN;
+
+    let data = [];
+    try {
+      const r = await fetch(url, { headers });
+      data = await r.json();
+      if (!Array.isArray(data)) data = [];
+    } catch (e) {
+      return res.status(502).json({ ok:false, error:'tsb_fetch_failed' });
+    }
+
+    // Normalize fields
+    const items = data.map(d => {
+      const title = d.component || d.system_type || 'TSB';
+      const tsbNum = d.bulletin_number || d.tsb_number || d.nhtsa_tsb_number || '';
+      const summary = d.summary || d.bulletin_summary || d.bulletinsummary || d.description || '';
+      return { title: tsbNum ? `${title} (${tsbNum})` : title, summary };
+    }).slice(0, 25);
+
+    res.json({ ok:true, year, make, model, count: items.length, items, source: 'nhtsa-tsb (DOT Socrata)' });
+  } catch (e) {
+    console.error('tsb route error', e);
+    res.status(500).json({ ok:false, error:'tsb_error' });
+  }
+});
+
+// ---------- Evidence (NHTSA Recalls + Complaints + TSB) with risk scoring ----------
+app.post('/api/evidence/score', async (req, res) => {
+  try {
+    const { vin='', vehicle='' } = req.body || {};
+
+    // Parse/derive Y/M/M
+    let year = null, make = null, model = null;
+    try {
+      const parts = (vehicle||'').trim().split(/\s+/);
+      const y = parseInt(parts[0], 10);
+      if (!isNaN(y)) { year = y; make = parts[1] || null; model = parts[2] || null; }
+    } catch {}
+    if ((!year || !make || !model) && vin){
+      try {
+        const r = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`);
+        const j = await r.json();
+        const row = j?.Results?.[0] || {};
+        year = year || parseInt(row.ModelYear, 10) || null;
+        make = make || row.Make || null;
+        model = model || row.Model || null;
+      } catch {}
+    }
+    if (!year || !make || !model) return res.status(400).json({ ok:false, error:'need_year_make_model' });
+
+    async function getJSON(url){ try { const r = await fetch(url); return await r.json(); } catch { return null; } }
+
+    // Fetch NHTSA recalls + complaints
+    let recalls = [];
+    let complaints = [];
+    const rec = await getJSON(`https://api.nhtsa.gov/recalls/recallsByVehicle?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&modelYear=${encodeURIComponent(year)}`);
+    if (rec && rec.results) recalls = rec.results;
+    const cmp = await getJSON(`https://api.nhtsa.gov/Complaints/ByVehicle?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&modelYear=${encodeURIComponent(year)}`);
+    if (cmp && cmp.results) complaints = cmp.results;
+
+    // Fetch TSBs via DOT Socrata
+    const baseUrl = 'https://data.transportation.gov/resource/hczg-qbhf.json';
+    let tsbs = [];
+    try {
+      const headers = { 'Accept': 'application/json' };
+      if (process.env.SOCRATA_APP_TOKEN) headers['X-App-Token'] = process.env.SOCRATA_APP_TOKEN;
+      const url = `${baseUrl}?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&model_year=${encodeURIComponent(year)}&$limit=100`;
+      const r = await fetch(url, { headers }); tsbs = await r.json(); if (!Array.isArray(tsbs)) tsbs = [];
+    } catch { tsbs = []; }
+
+    // Buckets
+    const buckets = [
+      { key:'engine', label:'Engine / Oil consumption' },
+      { key:'trans', label:'Transmission' },
+      { key:'brake', label:'Brakes' },
+      { key:'air bag', label:'Airbags / SRS' },
+      { key:'electr', label:'Electrical' },
+      { key:'steering', label:'Steering' },
+      { key:'susp', label:'Suspension' },
+      { key:'fuel', label:'Fuel system' },
+      { key:'ac', label:'HVAC / A/C' },
+      { key:'paint', label:'Paint / Exterior' },
+    ];
+    const lowerIncludes = (txt, needle) => (txt||'').toLowerCase().includes(needle);
+    const buckCounts = new Map(); // complaints
+    const buckTSB = new Map();    // has tsb mention
+    const buckRecall = new Map(); // has recall mention
+
+    complaints.forEach(c => {
+      const txt = `${c?.component || ''} ${c?.summary || ''} ${c?.narrative || ''}`.toLowerCase();
+      buckets.forEach(b => { if (lowerIncludes(txt, b.key)) buckCounts.set(b.label, (buckCounts.get(b.label)||0)+1); });
+    });
+
+    recalls.forEach(r => {
+      const txt = `${r?.Component || ''} ${r?.Summary || ''}`.toLowerCase();
+      buckets.forEach(b => { if (lowerIncludes(txt, b.key)) buckRecall.set(b.label, true); });
+    });
+
+    tsbs.forEach(t => {
+      const txt = `${t?.component || ''} ${t?.system_type || ''} ${t?.summary || ''}`.toLowerCase();
+      buckets.forEach(b => { if (lowerIncludes(txt, b.key)) buckTSB.set(b.label, true); });
+    });
+
+    const scored = buckets.map(b => {
+      const c = buckCounts.get(b.label)||0;
+      const hasT = !!buckTSB.get(b.label);
+      const hasR = !!buckRecall.get(b.label);
+      const score = (hasT?3:0) + (hasR?2:0) + Math.floor(c/10); // simple weighting
+      const rationale = [
+        hasT ? 'TSB present (+3)' : null,
+        hasR ? 'Recall mention (+2)' : null,
+        c ? `${c} complaints (~+${Math.floor(c/10)})` : null
+      ].filter(Boolean).join(' · ');
+      return { label: b.label, complaints: c, tsb: hasT, recall: hasR, score, rationale };
+    }).filter(x => x.score > 0).sort((a,b)=>b.score-a.score).slice(0,5);
+
+    // Optional: web corroboration via SerpAPI allowlist
+    const SERP_API_KEY = process.env.SERP_API_KEY || '';
+    const allow = ['nhtsa.gov','carcomplaints.com','repairpal.com','consumerreports.org','iihs.org','edmunds.com','kbb.com','cars.com','autorecalls']; // rough
+    let webSignals = [];
+    if (SERP_API_KEY) {
+      try {
+        const q = `${year} ${make} ${model} common problems`;
+        const resp = await fetch(`https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(q)}&num=10&api_key=${SERP_API_KEY}`);
+        const data = await resp.json();
+        const org = (data?.organic_results || []).filter(r => {
+          try { const u = new URL(r.link); return allow.some(d => u.hostname.includes(d)); } catch { return false; }
+        });
+        const snippets = org.map(r=> (r.snippet||'').toLowerCase()).join(' ');
+        buckets.forEach(b => {
+          if (snippets.includes(b.key)) {
+            const idx = scored.findIndex(s => s.label === b.label);
+            if (idx >= 0) { scored[idx].score += 1; scored[idx].rationale += ' · web corroboration (+1)'; }
+            else webSignals.push(b.label);
+          }
+        });
+      } catch {}
+      scored.sort((a,b)=>b.score-a.score);
+    }
+
+    // Suggested recon items (non-binding hints)
+    function suggestCosts(label){
+      const out = [];
+      const push = (lbl, amt, why) => out.push({ label: lbl, amount: amt, rationale: why, source: 'risk_map' });
+      if (label.startsWith('Engine')) { push('Engine air filter', 45, 'Engine bucket'); push('Oil change', 60, 'Engine bucket'); }
+      else if (label === 'Transmission') { push('Transmission service', 250, 'Trans bucket'); }
+      else if (label === 'Brakes') { push('Brakes (pads/rotors est.)', 450, 'Brakes bucket'); }
+      else if (label === 'Electrical') { push('Battery', 180, 'Electrical bucket'); }
+      else if (label === 'Steering') { push('Wheel alignment', 110, 'Steering bucket'); }
+      else if (label === 'Suspension') { push('Suspension inspection', 120, 'Suspension bucket'); }
+      else if (label === 'HVAC / A/C') { push('A/C service', 150, 'HVAC bucket'); }
+      return out;
+    }
+    const recommendations = scored.flatMap(s => suggestCosts(s.label));
+
+    res.json({
+      ok:true,
+      vehicle: { year, make, model },
+      counts: { recalls: recalls.length, complaints: complaints.length, tsbs: tsbs.length },
+      topRisks: scored,
+      recommendations,
+      source: 'nhtsa+tsb (+web if configured)'
+    });
+  } catch (e) {
+    console.error('evidence score error', e);
+    res.status(500).json({ ok:false, error:'evidence_failed' });
   }
 });

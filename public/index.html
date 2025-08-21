@@ -85,6 +85,69 @@
       if (res && res.url) window.open(res.url, '_blank'); else alert('Could not generate PDF');
     }
 
+
+    async function fetchTSBs(){
+      const vin = document.getElementById('vin').value.trim();
+      let vehicle = '';
+      try { vehicle = document.getElementById('decodedBanner').innerText.trim(); } catch {}
+      const res = await fetch('/api/maintenance/tsb', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle }) }).then(r=>r.json());
+      if (!res || !res.ok){ alert('Could not fetch TSBs'); return; }
+      const box = document.getElementById('tsbBox');
+      box.style.display = 'block';
+      document.getElementById('tsbCount').innerText = `${res.count||0} bulletin(s) found for ${res.year||''} ${res.make||''} ${res.model||''}`;
+      const items = res.items || [];
+      const list = items.map(i => `<li><strong>${i.title||'TSB'}</strong>${i.summary?(' — ' + i.summary):''}</li>`).join('');
+      document.getElementById('tsbList').innerHTML = list || '<li class="muted">No bulletins returned.</li>';
+    }
+
+
+    let _evidence = null;
+    async function fetchEvidence(){
+      const vin = document.getElementById('vin').value.trim();
+      let vehicle = ''; try { vehicle = document.getElementById('decodedBanner').innerText.trim(); } catch {}
+      const res = await fetch('/api/evidence/score', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle }) }).then(r=>r.json());
+      if (!res || !res.ok) { alert('Could not fetch evidence'); return; }
+      _evidence = res;
+      const bR = document.getElementById('badgeRecalls'); bR.style.display='inline-block'; bR.innerText = `Recalls: ${res.counts?.recalls ?? 0}`;
+      const bC = document.getElementById('badgeComplaints'); bC.style.display='inline-block'; bC.innerText = `Complaints: ${res.counts?.complaints ?? 0}`;
+      const bT = document.getElementById('badgeTSB'); bT.style.display='inline-block'; bT.innerText = `TSBs: ${res.counts?.tsbs ?? 0}`;
+      const risks = res.topRisks || [];
+      document.getElementById('riskList').innerHTML = risks.map(r => `<li><strong>${r.label}</strong> — score ${r.score} <span class="muted">(${r.rationale})</span></li>`).join('') || '<li class="muted">No notable risks found.</li>';
+    }
+
+    function applyEvidenceToRecon(){
+      if (!_evidence) { alert('Run Get Evidence first'); return; }
+      const recs = _evidence.recommendations || [];
+      if (!Array.isArray(recs) || !recs.length){ alert('No recon suggestions from evidence'); return; }
+      if (!window.costItems) window.costItems = [];
+      recs.forEach(it => window.costItems.push(it));
+      if (typeof renderCosts === 'function') renderCosts();
+      alert('Top risk suggestions added to Recon.');
+    }
+
+    // Include evidence in Customer PDF
+    const _printPrev = printCustomerPDF;
+    printCustomerPDF = async function(){
+      const vin = document.getElementById('vin').value.trim();
+      if (!vin) return alert('Enter a VIN first');
+      const miles = Number(document.getElementById('mileage').value||0);
+      let vehicle = '';
+      try { const b = document.getElementById('decodedBanner').innerText.trim(); if (b) vehicle = b.replace(/\s+/g, ' '); } catch {}
+      const body = {
+        vin, vehicle, mileage: miles,
+        valuation: valuation || {},
+        adjustedWholesale: (typeof adjustedWholesale === 'number') ? adjustedWholesale : null,
+        deduction: Array.isArray(gapItems)? gapItems.reduce((s,it)=>s+Number(it.amount||0),0) : 0,
+        gapItems: gapItems || [],
+        carfaxSummary: carfaxSummary || {},
+        carfaxUrl: carfaxUrl || '',
+        additionalCosts: (window.costItems||[]),
+        evidence: _evidence || null
+      };
+      const res = await fetch('/api/report/customer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
+      if (res && res.url) window.open(res.url, '_blank'); else alert('Could not generate PDF');
+    }
+
 </script>
   <script>pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
   async function printCustomerPDF(){
@@ -161,6 +224,69 @@
         carfaxSummary: carfaxSummary || {},
         carfaxUrl: carfaxUrl || '',
         additionalCosts: costItems || []
+      };
+      const res = await fetch('/api/report/customer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
+      if (res && res.url) window.open(res.url, '_blank'); else alert('Could not generate PDF');
+    }
+
+
+    async function fetchTSBs(){
+      const vin = document.getElementById('vin').value.trim();
+      let vehicle = '';
+      try { vehicle = document.getElementById('decodedBanner').innerText.trim(); } catch {}
+      const res = await fetch('/api/maintenance/tsb', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle }) }).then(r=>r.json());
+      if (!res || !res.ok){ alert('Could not fetch TSBs'); return; }
+      const box = document.getElementById('tsbBox');
+      box.style.display = 'block';
+      document.getElementById('tsbCount').innerText = `${res.count||0} bulletin(s) found for ${res.year||''} ${res.make||''} ${res.model||''}`;
+      const items = res.items || [];
+      const list = items.map(i => `<li><strong>${i.title||'TSB'}</strong>${i.summary?(' — ' + i.summary):''}</li>`).join('');
+      document.getElementById('tsbList').innerHTML = list || '<li class="muted">No bulletins returned.</li>';
+    }
+
+
+    let _evidence = null;
+    async function fetchEvidence(){
+      const vin = document.getElementById('vin').value.trim();
+      let vehicle = ''; try { vehicle = document.getElementById('decodedBanner').innerText.trim(); } catch {}
+      const res = await fetch('/api/evidence/score', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle }) }).then(r=>r.json());
+      if (!res || !res.ok) { alert('Could not fetch evidence'); return; }
+      _evidence = res;
+      const bR = document.getElementById('badgeRecalls'); bR.style.display='inline-block'; bR.innerText = `Recalls: ${res.counts?.recalls ?? 0}`;
+      const bC = document.getElementById('badgeComplaints'); bC.style.display='inline-block'; bC.innerText = `Complaints: ${res.counts?.complaints ?? 0}`;
+      const bT = document.getElementById('badgeTSB'); bT.style.display='inline-block'; bT.innerText = `TSBs: ${res.counts?.tsbs ?? 0}`;
+      const risks = res.topRisks || [];
+      document.getElementById('riskList').innerHTML = risks.map(r => `<li><strong>${r.label}</strong> — score ${r.score} <span class="muted">(${r.rationale})</span></li>`).join('') || '<li class="muted">No notable risks found.</li>';
+    }
+
+    function applyEvidenceToRecon(){
+      if (!_evidence) { alert('Run Get Evidence first'); return; }
+      const recs = _evidence.recommendations || [];
+      if (!Array.isArray(recs) || !recs.length){ alert('No recon suggestions from evidence'); return; }
+      if (!window.costItems) window.costItems = [];
+      recs.forEach(it => window.costItems.push(it));
+      if (typeof renderCosts === 'function') renderCosts();
+      alert('Top risk suggestions added to Recon.');
+    }
+
+    // Include evidence in Customer PDF
+    const _printPrev = printCustomerPDF;
+    printCustomerPDF = async function(){
+      const vin = document.getElementById('vin').value.trim();
+      if (!vin) return alert('Enter a VIN first');
+      const miles = Number(document.getElementById('mileage').value||0);
+      let vehicle = '';
+      try { const b = document.getElementById('decodedBanner').innerText.trim(); if (b) vehicle = b.replace(/\s+/g, ' '); } catch {}
+      const body = {
+        vin, vehicle, mileage: miles,
+        valuation: valuation || {},
+        adjustedWholesale: (typeof adjustedWholesale === 'number') ? adjustedWholesale : null,
+        deduction: Array.isArray(gapItems)? gapItems.reduce((s,it)=>s+Number(it.amount||0),0) : 0,
+        gapItems: gapItems || [],
+        carfaxSummary: carfaxSummary || {},
+        carfaxUrl: carfaxUrl || '',
+        additionalCosts: (window.costItems||[]),
+        evidence: _evidence || null
       };
       const res = await fetch('/api/report/customer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
       if (res && res.url) window.open(res.url, '_blank'); else alert('Could not generate PDF');
@@ -247,6 +373,69 @@
       if (res && res.url) window.open(res.url, '_blank'); else alert('Could not generate PDF');
     }
 
+
+    async function fetchTSBs(){
+      const vin = document.getElementById('vin').value.trim();
+      let vehicle = '';
+      try { vehicle = document.getElementById('decodedBanner').innerText.trim(); } catch {}
+      const res = await fetch('/api/maintenance/tsb', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle }) }).then(r=>r.json());
+      if (!res || !res.ok){ alert('Could not fetch TSBs'); return; }
+      const box = document.getElementById('tsbBox');
+      box.style.display = 'block';
+      document.getElementById('tsbCount').innerText = `${res.count||0} bulletin(s) found for ${res.year||''} ${res.make||''} ${res.model||''}`;
+      const items = res.items || [];
+      const list = items.map(i => `<li><strong>${i.title||'TSB'}</strong>${i.summary?(' — ' + i.summary):''}</li>`).join('');
+      document.getElementById('tsbList').innerHTML = list || '<li class="muted">No bulletins returned.</li>';
+    }
+
+
+    let _evidence = null;
+    async function fetchEvidence(){
+      const vin = document.getElementById('vin').value.trim();
+      let vehicle = ''; try { vehicle = document.getElementById('decodedBanner').innerText.trim(); } catch {}
+      const res = await fetch('/api/evidence/score', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle }) }).then(r=>r.json());
+      if (!res || !res.ok) { alert('Could not fetch evidence'); return; }
+      _evidence = res;
+      const bR = document.getElementById('badgeRecalls'); bR.style.display='inline-block'; bR.innerText = `Recalls: ${res.counts?.recalls ?? 0}`;
+      const bC = document.getElementById('badgeComplaints'); bC.style.display='inline-block'; bC.innerText = `Complaints: ${res.counts?.complaints ?? 0}`;
+      const bT = document.getElementById('badgeTSB'); bT.style.display='inline-block'; bT.innerText = `TSBs: ${res.counts?.tsbs ?? 0}`;
+      const risks = res.topRisks || [];
+      document.getElementById('riskList').innerHTML = risks.map(r => `<li><strong>${r.label}</strong> — score ${r.score} <span class="muted">(${r.rationale})</span></li>`).join('') || '<li class="muted">No notable risks found.</li>';
+    }
+
+    function applyEvidenceToRecon(){
+      if (!_evidence) { alert('Run Get Evidence first'); return; }
+      const recs = _evidence.recommendations || [];
+      if (!Array.isArray(recs) || !recs.length){ alert('No recon suggestions from evidence'); return; }
+      if (!window.costItems) window.costItems = [];
+      recs.forEach(it => window.costItems.push(it));
+      if (typeof renderCosts === 'function') renderCosts();
+      alert('Top risk suggestions added to Recon.');
+    }
+
+    // Include evidence in Customer PDF
+    const _printPrev = printCustomerPDF;
+    printCustomerPDF = async function(){
+      const vin = document.getElementById('vin').value.trim();
+      if (!vin) return alert('Enter a VIN first');
+      const miles = Number(document.getElementById('mileage').value||0);
+      let vehicle = '';
+      try { const b = document.getElementById('decodedBanner').innerText.trim(); if (b) vehicle = b.replace(/\s+/g, ' '); } catch {}
+      const body = {
+        vin, vehicle, mileage: miles,
+        valuation: valuation || {},
+        adjustedWholesale: (typeof adjustedWholesale === 'number') ? adjustedWholesale : null,
+        deduction: Array.isArray(gapItems)? gapItems.reduce((s,it)=>s+Number(it.amount||0),0) : 0,
+        gapItems: gapItems || [],
+        carfaxSummary: carfaxSummary || {},
+        carfaxUrl: carfaxUrl || '',
+        additionalCosts: (window.costItems||[]),
+        evidence: _evidence || null
+      };
+      const res = await fetch('/api/report/customer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
+      if (res && res.url) window.open(res.url, '_blank'); else alert('Could not generate PDF');
+    }
+
 </script>
   <style>
     :root[data-theme="light"]{ --bg:#f7fafc; --surface:#fff; --card:#fff; --text:#0f172a; --muted:#475569; --primary:#2563eb; --btn-text:#fff; --border:#d6e0ee; --accent:#e2e8f0; }
@@ -291,7 +480,13 @@
 
     /* Vehicle banner tint */
     #decodedBanner .card{ background: linear-gradient(180deg, rgba(37,99,235,.06), var(--surface)); border-color: rgba(37,99,235,.35); }
-</style>
+
+    .badge{ display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px; font-weight:700; }
+    .badge.blue{ background:rgba(37,99,235,.12); color:#1e3a8a; border:1px solid rgba(37,99,235,.24); }
+    .badge.amber{ background:rgba(245,158,11,.14); color:#7c2d12; border:1px solid rgba(245,158,11,.28); }
+    .badge.green{ background:rgba(16,185,129,.14); color:#064e3b; border:1px solid rgba(16,185,129,.28); }
+
+  </style>
 </head>
 <body data-theme="light">
   <div style="display:flex; justify-content:space-between; align-items:center; gap:12px">
@@ -357,7 +552,14 @@
       </div>`;
     }
     function historyBox(h){ const acc=h?.accidents??'—', owners=h?.owners??'—', svc=h?.serviceRecords??'—'; return `<div><h4 style="font-size:18px">History</h4><div class="card card-value" style="padding:12px"><div class="stat"><span><strong>Accidents</strong></span><span>${acc}</span></div><div class="stat"><span><strong>Owners</strong></span><span>${owners}</span></div><div class="stat"><span><strong>Service Records</strong></span><span>${svc}</span></div></div></div>`; }
-    function maintenanceBox(m){ const up=(m&&Array.isArray(m.upcoming))?m.upcoming.map(x=>`<li>${x}</li>`).join(''):'<li>—</li>'; const intervals=(m&&m.intervals)?Object.entries(m.intervals).map(([k,v])=>`<li><strong>${k}:</strong> ${v}</li>`).join(''):''; return `<div><h4 style="font-size:18px">Maintenance</h4><div class="card card-maint" style="padding:12px"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px"><div></div><button class="btn" onclick="fetchCommonIssues()">Get Common Issues</button></div><div id="commonIssuesCallout" style="display:none; border-left:4px solid #F59E0B; background:rgba(245,158,11,.07); padding:10px; border-radius:10px; margin-bottom:8px"><strong>Heads up:</strong> <span id="commonNote"></span></div><div><strong>Upcoming</strong></div><ul>${up}</ul><div style="margin-top:6px"><strong>Intervals</strong></div><ul>${intervals}</ul></div></div>`; }
+    function maintenanceBox(m){ const up=(m&&Array.isArray(m.upcoming))?m.upcoming.map(x=>`<li>${x}</li>`).join(''):'<li>—</li>'; const intervals=(m&&m.intervals)?Object.entries(m.intervals).map(([k,v])=>`<li><strong>${k}:</strong> ${v}</li>`).join(''):''; return `<div><h4 style="font-size:18px">Maintenance</h4><div class="card card-maint" style="padding:12px"><div style="display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-bottom:8px"><button class="btn" onclick="fetchCommonIssues()">Get Common Issues</button><button class="btn secondary" onclick="fetchTSBs()">Get TSBs</button></div>
+    <div id="tsbBox" style="display:none; margin-top:8px; border-left:4px solid #6366F1; background:rgba(99,102,241,.08); padding:10px; border-radius:10px">
+      <div class="muted" style="text-transform:uppercase; letter-spacing:.12em">Technical Service Bulletins</div>
+      <div id="tsbCount" class="muted"></div>
+      <ul id="tsbList" style="margin-top:6px"></ul>
+    </div>
+
+    <div id="commonIssuesCallout" style="display:none; border-left:4px solid #F59E0B; background:rgba(245,158,11,.07); padding:10px; border-radius:10px; margin-bottom:8px"><strong>Heads up:</strong> <span id="commonNote"></span></div><div><strong>Upcoming</strong></div><ul>${up}</ul><div style="margin-top:6px"><strong>Intervals</strong></div><ul>${intervals}</ul></div></div>`; }
 
     async function lookup(){
       const vin=document.getElementById('vin').value.trim(); if(!vin) return alert('Enter a VIN');
@@ -539,6 +741,69 @@
       if (res && res.url) window.open(res.url, '_blank'); else alert('Could not generate PDF');
     }
 
+
+    async function fetchTSBs(){
+      const vin = document.getElementById('vin').value.trim();
+      let vehicle = '';
+      try { vehicle = document.getElementById('decodedBanner').innerText.trim(); } catch {}
+      const res = await fetch('/api/maintenance/tsb', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle }) }).then(r=>r.json());
+      if (!res || !res.ok){ alert('Could not fetch TSBs'); return; }
+      const box = document.getElementById('tsbBox');
+      box.style.display = 'block';
+      document.getElementById('tsbCount').innerText = `${res.count||0} bulletin(s) found for ${res.year||''} ${res.make||''} ${res.model||''}`;
+      const items = res.items || [];
+      const list = items.map(i => `<li><strong>${i.title||'TSB'}</strong>${i.summary?(' — ' + i.summary):''}</li>`).join('');
+      document.getElementById('tsbList').innerHTML = list || '<li class="muted">No bulletins returned.</li>';
+    }
+
+
+    let _evidence = null;
+    async function fetchEvidence(){
+      const vin = document.getElementById('vin').value.trim();
+      let vehicle = ''; try { vehicle = document.getElementById('decodedBanner').innerText.trim(); } catch {}
+      const res = await fetch('/api/evidence/score', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle }) }).then(r=>r.json());
+      if (!res || !res.ok) { alert('Could not fetch evidence'); return; }
+      _evidence = res;
+      const bR = document.getElementById('badgeRecalls'); bR.style.display='inline-block'; bR.innerText = `Recalls: ${res.counts?.recalls ?? 0}`;
+      const bC = document.getElementById('badgeComplaints'); bC.style.display='inline-block'; bC.innerText = `Complaints: ${res.counts?.complaints ?? 0}`;
+      const bT = document.getElementById('badgeTSB'); bT.style.display='inline-block'; bT.innerText = `TSBs: ${res.counts?.tsbs ?? 0}`;
+      const risks = res.topRisks || [];
+      document.getElementById('riskList').innerHTML = risks.map(r => `<li><strong>${r.label}</strong> — score ${r.score} <span class="muted">(${r.rationale})</span></li>`).join('') || '<li class="muted">No notable risks found.</li>';
+    }
+
+    function applyEvidenceToRecon(){
+      if (!_evidence) { alert('Run Get Evidence first'); return; }
+      const recs = _evidence.recommendations || [];
+      if (!Array.isArray(recs) || !recs.length){ alert('No recon suggestions from evidence'); return; }
+      if (!window.costItems) window.costItems = [];
+      recs.forEach(it => window.costItems.push(it));
+      if (typeof renderCosts === 'function') renderCosts();
+      alert('Top risk suggestions added to Recon.');
+    }
+
+    // Include evidence in Customer PDF
+    const _printPrev = printCustomerPDF;
+    printCustomerPDF = async function(){
+      const vin = document.getElementById('vin').value.trim();
+      if (!vin) return alert('Enter a VIN first');
+      const miles = Number(document.getElementById('mileage').value||0);
+      let vehicle = '';
+      try { const b = document.getElementById('decodedBanner').innerText.trim(); if (b) vehicle = b.replace(/\s+/g, ' '); } catch {}
+      const body = {
+        vin, vehicle, mileage: miles,
+        valuation: valuation || {},
+        adjustedWholesale: (typeof adjustedWholesale === 'number') ? adjustedWholesale : null,
+        deduction: Array.isArray(gapItems)? gapItems.reduce((s,it)=>s+Number(it.amount||0),0) : 0,
+        gapItems: gapItems || [],
+        carfaxSummary: carfaxSummary || {},
+        carfaxUrl: carfaxUrl || '',
+        additionalCosts: (window.costItems||[]),
+        evidence: _evidence || null
+      };
+      const res = await fetch('/api/report/customer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
+      if (res && res.url) window.open(res.url, '_blank'); else alert('Could not generate PDF');
+    }
+
 </script>
 
   
@@ -566,6 +831,26 @@
         <tr><td style="text-align:right; font-weight:bold">Reconditioning total:</td><td style="text-align:right; font-weight:bold" id="reconTotal">$0</td><td></td></tr>
       </tfoot>
     </table>
+  </div>
+
+  
+  <div class="card" style="border-left:4px solid #0EA5E9">
+    <div style="display:flex; justify-content:space-between; align-items:center">
+      <div>
+        <div class="muted" style="text-transform:uppercase; letter-spacing:.12em">Evidence</div>
+        <h3 style="margin-top:6px">NHTSA + TSB Risk Overview</h3>
+      </div>
+      <div style="display:flex; gap:8px">
+        <button class="btn" onclick="fetchEvidence()">Get Evidence</button>
+        <button class="btn secondary" onclick="applyEvidenceToRecon()">Apply Top Risks to Recon</button>
+      </div>
+    </div>
+    <div style="margin-top:8px">
+      <span class="badge blue" id="badgeRecalls" style="display:none"></span>
+      <span class="badge amber" id="badgeComplaints" style="display:none"></span>
+      <span class="badge green" id="badgeTSB" style="display:none"></span>
+    </div>
+    <ul id="riskList" style="margin-top:8px"></ul>
   </div>
 
   <div class="card" style="border-left: 4px solid #2563EB">
