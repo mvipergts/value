@@ -1,347 +1,456 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Car Value, History & Maintenance Tool</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-  <script>pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";</script>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <style>
-    :root[data-theme="light"]{ --bg:#f7fafc; --surface:#fff; --card:#fff; --text:#0f172a; --muted:#475569; --primary:#2563eb; --btn-text:#fff; --border:#d6e0ee; --accent:#e2e8f0; }
-    :root[data-theme="dark"]{ --bg:#0c111c; --surface:#111827; --card:#111827; --text:#e9edf5; --muted:#b8c2d6; --primary:#2563eb; --btn-text:#fff; --border:#223047; --accent:#1e293b; }
-    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; max-width:1100px; margin:0 auto; padding:28px; 
-      background: linear-gradient(180deg, var(--accent) 0%, var(--bg) 18%); 
-      color:var(--text); font-size:16px; line-height:1.5; }
-    input,button,textarea{ padding:12px 14px; margin:6px 0; border-radius:12px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:15px; }
-    .btn{ display:inline-flex; align-items:center; gap:8px; padding:12px 18px; border-radius:12px; border:1px solid var(--primary); background:var(--primary); color:var(--btn-text); font-weight:800; letter-spacing:.2px; box-shadow:0 6px 18px rgba(37,99,235,.28); cursor:pointer; }
-    .btn.secondary{ background:var(--surface); color:var(--primary); border-color:var(--primary); }
-    .btn.full{ width:100%; justify-content:center; }
-    .card{ border:1px solid var(--border); background:linear-gradient(180deg,var(--card),var(--surface)); padding:18px; border-radius:16px; margin:16px 0; }
-    .grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(260px,1fr)); gap:14px; }
-    .stat{ display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--accent); font-size:15px; }
-    .stat:last-child{ border-bottom:0; }
-    .muted{ color:var(--muted); font-size:12px; }
-    pre{ background:#0a0f1a10; padding:12px; border-radius:12px; border:1px dashed var(--accent); white-space:pre-wrap }
-    .card-value{ border-color: rgba(16,185,129,.35); background: linear-gradient(180deg, rgba(16,185,129,.08), var(--card)); box-shadow: 0 10px 24px rgba(16,185,129,.12); }
-    .card-history{ border-color: rgba(245,158,11,.35); background: linear-gradient(180deg, rgba(245,158,11,.10), var(--card)); box-shadow: 0 10px 24px rgba(245,158,11,.14); }
-    .card-maint{ border-color: rgba(99,102,241,.35); background: linear-gradient(180deg, rgba(99,102,241,.10), var(--card)); box-shadow: 0 10px 24px rgba(99,102,241,.16); }
-    table thead th{ background: rgba(2,6,23,.03); padding:8px; }
-    table tbody tr:nth-child(odd){ background: rgba(2,6,23,.02); }
-    table td{ padding:8px; }
-    #decodedBanner .card{ background: linear-gradient(180deg, rgba(37,99,235,.06), var(--surface)); border-color: rgba(37,99,235,.35); }
-    .badge{ display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px; font-weight:700; }
-    .badge.blue{ background:rgba(37,99,235,.12); color:#1e3a8a; border:1px solid rgba(37,99,235,.24); }
-    .badge.amber{ background:rgba(245,158,11,.14); color:#7c2d12; border:1px solid rgba(245,158,11,.28); }
-    .badge.green{ background:rgba(16,185,129,.14); color:#064e3b; border:1px solid rgba(16,185,129,.28); }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Car Value, History & Maintenance — Pro v6.2</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{ --bg:#f7fafc; --surface:#fff; --card:#fff; --text:#0f172a; --muted:#475569; --primary:#2563eb; --border:#d6e0ee; --accent:#e2e8f0; --green:#10b981; --amber:#f59e0b; --indigo:#6366f1; }
+*{ box-sizing:border-box; }
+body{ font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto; margin:0; background:linear-gradient(180deg,#eef2ff 0%, #f8fafc 28%); color:var(--text); }
+.container{ max-width:1100px; margin:0 auto; padding:24px; }
+h1{ margin:0 0 8px 0; }
+small.muted{ color:var(--muted); }
+.card{ border:1px solid var(--border); background:linear-gradient(180deg, var(--card), var(--surface)); border-radius:16px; padding:16px; margin-top:14px; }
+.grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+input, button, textarea, select{ padding:12px 14px; border-radius:12px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:15px; }
+.btn{ background:var(--primary); color:#fff; border:1px solid var(--primary); border-radius:12px; padding:12px 18px; font-weight:800; box-shadow:0 6px 18px rgba(37,99,235,.22); cursor:pointer; }
+.btn.ghost{ background:#fff; color:var(--primary); }
+.badge{ padding:4px 10px; border-radius:999px; font-size:12px; font-weight:700; border:1px solid var(--accent); background:#fff; }
+.stat{ display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px dashed var(--accent); }
+.stat:last-child{ border-bottom:0; }
+summary{ cursor:pointer; }
+.hidden{ display:none; }
+table{ width:100%; border-collapse:collapse; }
+thead th{ text-align:left; background:rgba(2,6,23,.03); padding:8px; }
+tbody td{ padding:8px; border-bottom:1px dashed var(--accent); }
+tfoot td{ padding:8px; }
+
+/* Sticky summary bar */
+#sticky{ position:sticky; top:0; z-index:5; background: rgba(255,255,255,.86); backdrop-filter: blur(6px); border-bottom:1px solid var(--border); }
+#sticky .wrap{ max-width:1100px; margin:0 auto; padding:10px 24px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.pill{ border:1px solid var(--border); background:#fff; padding:8px 12px; border-radius:999px; font-weight:700; }
+.pill.blue{ border-color:rgba(37,99,235,.35); background:rgba(37,99,235,.08); }
+
+/* Wizard nav */
+#wizardNav{ display:flex; gap:8px; margin-top:8px; }
+.step{ padding:8px 14px; border-radius:12px; border:1px solid var(--border); }
+.step.active{ background:rgba(37,99,235,.1); border-color:var(--primary); }
+
+/* Modal */
+.modal{ position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; }
+.modal .panel{ width:720px; max-width:94vw; background:#fff; border-radius:14px; padding:18px; }
+.modal .grid{ grid-template-columns: repeat(2, minmax(0,1fr)); }
+</style>
 </head>
-<body data-theme="light">
-  <div style="display:flex; justify-content:space-between; align-items:center; gap:12px">
-    <h1 style="margin:0">Car Value, History & Maintenance Tool</h1>
-    <button id="themeBtn" class="btn secondary" onclick="toggleTheme()">Dark mode</button>
+<body>
+<div id="sticky">
+  <div class="wrap">
+    <strong>Summary:</strong>
+    <span class="pill">Retail: <span id="sRetail">$0</span></span>
+    <span class="pill">Wholesale: <span id="sWhole">$0</span></span>
+    <span class="pill">Maint: <span id="sMaint">-$0</span></span>
+    <span class="pill">Recon: <span id="sRecon">$0</span></span>
+    <span class="pill">Risk: <span id="sRisk">$0</span></span>
+    <span class="pill blue">Max Buy: <span id="sMax">$0</span></span>
+    <button class="btn ghost" onclick="openSettings()">Settings</button>
+    <button class="btn" onclick="printPdf()">Print Customer PDF</button>
+  </div>
+</div>
+
+<div class="container">
+  <h1>Car Value, History & Maintenance — Pro v6.2</h1>
+  <div id="wizardNav">
+    <div class="step active" id="step1Btn" onclick="showStep(1)">1) Identify</div>
+    <div class="step" id="step2Btn" onclick="showStep(2)">2) History</div>
+    <div class="step" id="step3Btn" onclick="showStep(3)">3) Service & Recon</div>
+    <div class="step" id="step4Btn" onclick="showStep(4)">4) Offer + Comps</div>
   </div>
 
-  <div class="card">
-    <label>VIN</label>
-    <div class="row" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap">
-      <input id="vin" placeholder="e.g., 1G1ZE5ST0GF253821" style="flex:2">
-      <input id="mileage" type="number" min="0" step="1" placeholder="Current mileage" style="flex:1">
+  <!-- Step 1 -->
+  <div id="step1" class="card">
+    <h3>Identify</h3>
+    <div style="display:flex; gap:10px; flex-wrap:wrap">
+      <input id="vin" placeholder="VIN">
+      <input id="miles" type="number" min="0" step="1" placeholder="Current mileage">
       <button class="btn" onclick="lookup()">Lookup</button>
     </div>
-    <div id="decodedBanner" class="muted" style="margin-top:6px"></div>
-    <div id="results" class="grid"></div>
-  </div>
-
-  <div class="card">
-    <div class="muted" style="text-transform:uppercase; letter-spacing:.12em">Carfax</div>
-    <h3 style="margin-top:6px">Upload Carfax PDF</h3>
-    <div class="row" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap">
-      <input type="file" id="carfax" accept="application/pdf,image/*">
-      <button class="btn" onclick="uploadCarfax()">Upload</button>
-      <button class="btn secondary" onclick="ocrLocal()">OCR scanned PDF</button>
-      <div id="carfaxSpin" class="muted" style="display:none">Uploading…</div>
-    </div>
-    <div id="carfaxUrl" class="muted"></div>
-    <div id="carfaxSummaryBox"></div>
-    <details style="margin-top:12px"><summary class="muted">Paste Carfax text (if your PDF is scanned)</summary>
-      <textarea id="carfaxPaste" rows="6" style="width:100%" placeholder="Paste Carfax text here..."></textarea>
-      <div><button class="btn secondary" onclick="summarizeCarfaxText()">Summarize Text</button></div>
-    </details>
-  </div>
-
-  <div class="card" style="border-left:4px solid #10B981">
-    <div class="muted" style="text-transform:uppercase;letter-spacing:.12em">Reconditioning</div>
-    <h3 style="margin-top:6px">Add Additional Costs</h3>
-    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px">
-      <button class="btn secondary" onclick="quickAdd('Tires (set)', 800)">+ Tires</button>
-      <button class="btn secondary" onclick="quickAdd('Windshield', 300)">+ Windshield</button>
-      <button class="btn secondary" onclick="quickAdd('Detail', 150)">+ Detail</button>
-      <button class="btn secondary" onclick="quickAdd('Inspection', 120)">+ Inspection</button>
-      <button class="btn secondary" onclick="quickAdd('Wheel alignment', 110)">+ Alignment</button>
-      <button class="btn secondary" onclick="quickAdd('Brakes (pads/rotors est.)', 450)">+ Brakes</button>
-      <button class="btn secondary" onclick="quickAdd('Battery', 180)">+ Battery</button>
-    </div>
-    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-      <input id="costLabel" placeholder="Custom item (e.g., Headlight)">
-      <input id="costAmount" type="number" min="0" step="1" placeholder="Amount">
-      <button class="btn" onclick="addCost()">Add</button>
-    </div>
-    <table style="width:100%; margin-top:10px; border-collapse:collapse">
-      <thead><tr><th style="text-align:left">Item</th><th style="text-align:right">Cost ($)</th><th></th></tr></thead>
-      <tbody id="costRows"><tr><td colspan="3" class="muted">No additional costs added.</td></tr></tbody>
-      <tfoot>
-        <tr><td style="text-align:right; font-weight:bold">Reconditioning total:</td><td style="text-align:right; font-weight:bold" id="reconTotal">$0</td><td></td></tr>
-      </tfoot>
-    </table>
-  </div>
-
-  <div class="card card-maint" style="border-left:4px solid #6366F1">
-    <div style="display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-bottom:8px">
-      <button class="btn" onclick="fetchCommonIssues()">Get Common Issues</button>
-      <button class="btn secondary" onclick="fetchTSBs()">Get TSBs</button>
-    </div>
-    <div id="commonIssuesCallout" style="display:none; border-left:4px solid #F59E0B; background:rgba(245,158,11,.07); padding:10px; border-radius:10px; margin-bottom:8px">
-      <strong>Heads up:</strong> <span id="commonNote"></span>
-    </div>
-    <div id="tsbBox" style="display:none; margin-top:8px; border-left:4px solid #6366F1; background:rgba(99,102,241,.08); padding:10px; border-radius:10px">
-      <div class="muted" style="text-transform:uppercase; letter-spacing:.12em">Technical Service Bulletins</div>
-      <div id="tsbCount" class="muted"></div>
-      <ul id="tsbList" style="margin-top:6px"></ul>
+    <div id="vehicleBanner" class="card" style="margin-top:10px"></div>
+    <div class="grid">
+      <div class="card">
+        <div class="stat"><span><strong>Retail</strong></span><span id="vRetail">$0</span></div>
+        <div class="stat"><span><strong>Wholesale</strong></span><span id="vWholesale">$0</span></div>
+        <details><summary class="muted">Raw valuation</summary><pre id="valRaw"></pre></details>
+      </div>
+      <div class="card">
+        <div class="badge" id="histBadges">Accidents 0 • Owners 0 • Records 0</div>
+        <details><summary class="muted">Raw history</summary><pre id="histRaw"></pre></details>
+      </div>
+      <div class="card">
+        <div class="badge">Intervals</div>
+        <ul id="intervals"></ul>
+      </div>
     </div>
   </div>
 
-  <div class="card" style="border-left:4px solid #0EA5E9">
+  <!-- Step 2 -->
+  <div id="step2" class="card hidden">
+    <h3>History</h3>
+    <div class="card">
+      <label>Upload Carfax / AutoCheck (PDF)</label>
+      <div style="display:flex; gap:10px; align-items:center">
+        <input type="file" id="carfax" accept="application/pdf">
+        <button class="btn" onclick="uploadCarfax()">Upload</button>
+      </div>
+      <div id="carfaxUrl" class="muted"></div>
+      <div id="carfaxBox" class="card"></div>
+      <details><summary class="muted">Paste text (for scanned PDFs)</summary>
+        <textarea id="carfaxPaste" rows="6" style="width:100%"></textarea>
+        <div><button class="btn ghost" onclick="summarizeText()">Summarize Text</button></div>
+      </details>
+    </div>
+  </div>
+
+  <!-- Step 3 -->
+  <div id="step3" class="card hidden">
+    <h3>Service & Recon</h3>
+    <div class="grid">
+      <div class="card">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+          <button class="btn" onclick="applyMaintenance()">Apply Maintenance (from Carfax)</button>
+          <button class="btn ghost" onclick="getEvidence()">Get NHTSA + TSB Evidence</button>
+        </div>
+        <h4 style="margin-top:10px">Maintenance Deductions</h4>
+        <table>
+          <thead><tr><th>Item</th><th style="text-align:right">Amount</th><th>Why</th></tr></thead>
+          <tbody id="maintRows"><tr><td class="muted" colspan="3">No items yet.</td></tr></tbody>
+          <tfoot><tr><td style="text-align:right"><strong>Total</strong></td><td style="text-align:right" id="maintTotal">$0</td><td></td></tr></tfoot>
+        </table>
+      </div>
+      <div class="card">
+        <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <button class="btn ghost" onclick="quick('Tires (set)', 800, 'tires')">+ Tires</button>
+          <button class="btn ghost" onclick="quick('Windshield', 300, 'glass')">+ Windshield</button>
+          <button class="btn ghost" onclick="quick('Detail', 150, 'detail')">+ Detail</button>
+          <button class="btn ghost" onclick="quick('Inspection', 120, 'inspection')">+ Inspection</button>
+          <button class="btn ghost" onclick="quick('Alignment', 110, 'wheel_alignment')">+ Alignment</button>
+          <button class="btn ghost" onclick="quick('Brakes (pads/rotors est.)', 450, 'brakes')">+ Brakes</button>
+          <button class="btn ghost" onclick="quick('Battery', 180, 'battery')">+ Battery</button>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:8px">
+          <input id="reconLabel" placeholder="Custom item">
+          <input id="reconAmt" type="number" min="0" step="1" placeholder="Amount">
+          <button class="btn" onclick="addRecon()">Add</button>
+        </div>
+        <table style="margin-top:8px">
+          <thead><tr><th>Item</th><th style="text-align:right">Cost</th><th></th></tr></thead>
+          <tbody id="reconRows"><tr><td class="muted" colspan="3">No additional costs.</td></tr></tbody>
+          <tfoot><tr><td style="text-align:right"><strong>Total</strong></td><td style="text-align:right" id="reconTotal">$0</td><td></td></tr></tfoot>
+        </table>
+      </div>
+      <div class="card">
+        <h4>Top Risks</h4>
+        <div id="riskBadge" class="badge">Recalls 0 • Complaints 0 • TSBs 0</div>
+        <ul id="riskList"></ul>
+        <button class="btn ghost" onclick="applyRisksToRecon()">Apply Top Risks to Recon</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 4 -->
+  <div id="step4" class="card hidden">
+    <h3>Offer + Market Comps</h3>
+    <div class="grid">
+      <div class="card">
+        <h4>Numbers</h4>
+        <div class="stat"><span><strong>Retail</strong></span><span id="oRetail">$0</span></div>
+        <div class="stat"><span><strong>Wholesale</strong></span><span id="oWhole">$0</span></div>
+        <div class="stat"><span><strong>Maint. deduction</strong></span><span id="oMaint">-$0</span></div>
+        <div class="stat"><span><strong>Wholesale (after)</strong></span><span id="oAdj">$0</span></div>
+        <div class="stat"><span><strong>Recon total</strong></span><span id="oRecon">$0</span></div>
+        <div class="stat"><span><strong>Risk reserve</strong></span><span id="oRisk">$0</span></div>
+        <div class="stat"><span><strong>Holding & fees</strong></span><span id="oHold">$0</span></div>
+        <div class="stat"><span><strong>Target Max Buy</strong></span><span id="oMax" style="font-weight:800">$0</span></div>
+      </div>
+      <div class="card">
+        <h4>eBay Comps (Free)</h4>
+        <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <input id="compZip" placeholder="ZIP (optional)" style="width:140px">
+          <select id="compRadius">
+            <option value="100">100 mi</option>
+            <option value="250">250 mi</option>
+            <option value="500" selected>500 mi</option>
+          </select>
+          <button class="btn" onclick="fetchSold()">Fetch SOLD</button>
+          <button class="btn ghost" onclick="fetchActive()">Fetch ACTIVE</button>
+          <button class="btn ghost" onclick="useSoldMedian()">Use SOLD Median as Retail</button>
+        </div>
+        <div class="stat"><span>Sold stats</span><span id="soldStats">—</span></div>
+        <div class="stat"><span>Active stats</span><span id="activeStats">—</span></div>
+        <details><summary>Sold list</summary><ul id="soldList"></ul></details>
+        <details><summary>Active list</summary><ul id="activeList"></ul></details>
+      </div>
+      <div class="card">
+        <h4>Proof</h4>
+        <details><summary class="muted">Carfax summary</summary><pre id="proofCarfax"></pre></details>
+        <details><summary class="muted">Evidence</summary><pre id="proofEvidence"></pre></details>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div id="settingsModal" class="modal">
+  <div class="panel">
     <div style="display:flex; justify-content:space-between; align-items:center">
-      <div>
-        <div class="muted" style="text-transform:uppercase; letter-spacing:.12em">Evidence</div>
-        <h3 style="margin-top:6px">NHTSA + TSB Risk Overview</h3>
+      <h3>Dealer Settings</h3>
+      <button class="btn ghost" onclick="closeSettings()">Close</button>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <label>Labor rate ($/hr)</label>
+        <input id="sLabor" type="number" min="0" step="1">
+        <label>Parts multiplier</label>
+        <input id="sParts" type="number" step="0.1">
+        <label>Desired profit ($)</label>
+        <input id="sProfit" type="number" min="0" step="1">
+        <label>Days to turn</label>
+        <input id="sDays" type="number" min="0" step="1">
       </div>
-      <div style="display:flex; gap:8px">
-        <button class="btn" onclick="fetchEvidence()">Get Evidence</button>
-        <button class="btn secondary" onclick="applyEvidenceToRecon()">Apply Top Risks to Recon</button>
+      <div class="card">
+        <label>Floorplan APR (decimal)</label>
+        <input id="sApr" type="number" step="0.01">
+        <label>Avg transport ($)</label>
+        <input id="sTrans" type="number" min="0" step="1">
+        <label>Marketing fees ($)</label>
+        <input id="sMkt" type="number" min="0" step="1">
+        <label>Warranty reserve ($)</label>
+        <input id="sWar" type="number" min="0" step="1">
       </div>
     </div>
-    <div style="margin-top:8px">
-      <span class="badge blue" id="badgeRecalls" style="display:none"></span>
-      <span class="badge amber" id="badgeComplaints" style="display:none"></span>
-      <span class="badge green" id="badgeTSB" style="display:none"></span>
+    <div class="card">
+      <h4>Risk Reserve Weights ($ per point)</h4>
+      <div id="riskWeightsGrid" class="grid"></div>
+      <label>Risk cap (% of wholesale)</label>
+      <input id="sCap" type="number" step="0.01">
     </div>
-    <ul id="riskList" style="margin-top:8px"></ul>
-  </div>
-
-  <div class="card" style="border-left: 4px solid #2563EB">
-    <h3>Reports</h3>
-    <p class="muted">Create a clean, customer-ready PDF with values, evidence, and maintenance deduction breakdown.</p>
-    <div style="display:flex; gap:12px; flex-wrap:wrap">
-      <button class="btn" onclick="printCustomerPDF()">Print Customer PDF</button>
+    <div style="display:flex; justify-content:flex-end; gap:8px">
+      <button class="btn ghost" onclick="closeSettings()">Cancel</button>
+      <button class="btn" onclick="saveSettings()">Save</button>
     </div>
   </div>
+</div>
 
-  <script>
-    let valuation=null, history=null, maintenance=null, carfaxUrl=null, carfaxSummary=null, carfaxText='';
-    let adjustedWholesale=null, gapItems=[];
-    let costItems = [];
-    let _evidence = null;
+<script>
+let valuation=null, historyData=null, maintData=null;
+let carfaxUrl=null, carfaxSummary=null, carfaxText='';
+let maintItems=[], reconItems=[], evidence=null, calc=null, vehicleLabel='', decoded={};
 
-    function toggleTheme(){ const root=document.body; const cur=root.getAttribute('data-theme')||'light'; const next=cur==='light'?'dark':'light'; root.setAttribute('data-theme',next); document.getElementById('themeBtn').textContent = next==='light'?'Dark mode':'Light mode'; }
-    const money = n => '$'+Number(n||0).toLocaleString();
-    function vehicleBanner(d){ const y=d?.year||'—', make=d?.make||'—', model=d?.model||'—', trim=d?.trim||''; const miles=document.getElementById('mileage').value; const label=[y,make,model,trim].filter(Boolean).join(' '); return `<div class="card" style="padding:14px; border:2px solid var(--accent)"><strong style="font-size:18px">${label}</strong>${d?.bodyClass?` · ${d.bodyClass}`:''}${miles?` · ${Number(miles).toLocaleString()} mi`:''}</div>`; }
+function fmt(n){ return '$'+Number(n||0).toLocaleString(); }
+function setText(id, val){ const el=document.getElementById(id); if(el) el.textContent=val; }
+function showStep(n){ [1,2,3,4].forEach(i=>{ document.getElementById('step'+i).classList.toggle('hidden', i!==n); document.getElementById('step'+i+'Btn').classList.toggle('active', i===n); }); if(n===4) refreshOffer(); }
 
-    function gapBreakdown(){
-      if (!Array.isArray(gapItems) || !gapItems.length) return '';
-      const rows = gapItems.map(it => `<tr><td>${it.label}</td><td style="text-align:right">${money(it.amount)}</td><td class="muted">${Array.isArray(it.rationale)?it.rationale.join(' • '):(it.rationale||'')}</td></tr>`).join('');
-      const total = gapItems.reduce((s,it)=>s+Number(it.amount||0),0);
-      return `<div class="card" style="margin-top:10px"><div class="muted" style="text-transform:uppercase;letter-spacing:.12em">Maintenance Deductions</div><h3 style="margin-top:6px">Breakdown</h3><table style="width:100%; border-collapse:collapse; margin-top:6px"><thead><tr><th style="text-align:left">Item</th><th style="text-align:right">Amount</th><th style="text-align:left">Why</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td style="text-align:right; font-weight:700">Total</td><td style="text-align:right; font-weight:700">${money(total)}</td><td></td></tr></tfoot></table></div>`;
+async function lookup(){
+  const vin = document.getElementById('vin').value.trim();
+  const miles = Number(document.getElementById('miles').value||0);
+  if (!vin) return alert('Enter VIN');
+  try{
+    const v = await fetch('/api/vin/'+encodeURIComponent(vin)).then(r=>r.json());
+    if (v && v.ok){
+      decoded = v;
+      vehicleLabel = [v.year, v.make, v.model, v.trim].filter(Boolean).join(' ');
+      document.getElementById('vehicleBanner').innerHTML = `<strong style="font-size:18px">${vehicleLabel}</strong>${v.bodyClass?(' · '+v.bodyClass):''}${miles?(' · '+miles.toLocaleString()+' mi'):''}`;
+      valuation = await fetch(`/api/value/${vin}?mileage=${miles}&year=${v.year||''}`).then(r=>r.json());
+      setText('vRetail', fmt(valuation.retail)); setText('vWholesale', fmt(valuation.wholesale));
+      document.getElementById('valRaw').textContent = JSON.stringify(valuation,null,2);
+      historyData = await fetch(`/api/history/${vin}`).then(r=>r.json());
+      document.getElementById('histBadges').textContent = `Accidents ${historyData.accidents} • Owners ${historyData.owners} • Records ${historyData.serviceRecords}`;
+      document.getElementById('histRaw').textContent = JSON.stringify(historyData,null,2);
+      maintData = await fetch(`/api/maintenance/${vin}`).then(r=>r.json());
+      document.getElementById('intervals').innerHTML = Object.entries(maintData.intervals||{}).map(([k,v])=>`<li><strong>${k}</strong>: ${v}</li>`).join('');
+      showStep(2); refreshOffer();
     }
+  }catch(e){ alert('VIN lookup failed'); }
+}
 
-    function valueBox(v){
-      const w = (v && v.wholesale!==undefined) ? money(v.wholesale) : '—';
-      const r = (v && v.retail!==undefined) ? money(v.retail) : '—';
-      const adjRow = (adjustedWholesale!=null) ? `<div class="stat"><span><strong>Maintenance deduction</strong></span><span>-${money(gapItems.reduce((s,it)=>s+Number(it.amount||0),0))}</span></div><div class="stat"><span><strong>Wholesale (after gaps)</strong></span><span>${money(adjustedWholesale)}</span></div>` : '';
-      const reconRows = (adjustedWholesale!=null) ? (()=>{ 
-          const totalRecon = (costItems||[]).reduce((s,it)=>s+Number(it.amount||0),0);
-          const target = Math.max(0, Number(adjustedWholesale||0) - totalRecon);
-          return `<div class='stat'><span><strong>Reconditioning total</strong></span><span>${money(totalRecon)}</span></div>
-                  <div class='stat'><span><strong>Target max buy</strong></span><span>${money(target)}</span></div>`;
-        })() : '';
-      return `<div><h4 style="font-size:18px">Value</h4><div class="card card-value" style="padding:12px"><div class="stat"><span><strong>Wholesale</strong></span><span>${w}</span></div><div class="stat"><span><strong>Retail</strong></span><span>${r}</span></div>${adjRow}${reconRows}</div>${adjustedWholesale!=null ? gapBreakdown() : ''}<div><button class="btn full" onclick="applyMaintenanceDeduction()">Apply Maintenance Deduction (Carfax)</button></div><details class="muted" style="margin-top:8px"><summary>Raw valuation data</summary><pre>${JSON.stringify(v, null, 2)}</pre></details></div>`;
-    }
+async function uploadCarfax(){
+  const f = document.getElementById('carfax').files[0]; if (!f) return alert('Pick a PDF first');
+  const fd = new FormData(); fd.append('file', f);
+  const res = await fetch('/api/carfax/upload',{ method:'POST', body: fd }).then(r=>r.json());
+  if (!res || !res.ok) { alert('Upload failed'); return; }
+  carfaxUrl = res.url; carfaxSummary = res.summary; carfaxText = res.text || '';
+  document.getElementById('carfaxUrl').innerHTML = `Uploaded: <a href="${carfaxUrl}" target="_blank">${carfaxUrl}</a>`;
+  document.getElementById('carfaxBox').innerHTML = carfaxSummary && !carfaxSummary.note
+      ? Object.entries(carfaxSummary).map(([k,v])=>`<div class="stat"><span><strong>${k}</strong></span><span>${Array.isArray(v)?v.join(', '):v}</span></div>`).join('')
+      : '<span class="muted">No text extracted. Paste text below.</span>';
+  refreshOffer();
+}
+async function summarizeText(){
+  const raw = document.getElementById('carfaxPaste').value||'';
+  if (!raw.trim()) return alert('Paste the text first');
+  const res = await fetch('/api/carfax/summarize-text',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rawText: raw })}).then(r=>r.json());
+  if (res.ok){ carfaxSummary = res.summary; document.getElementById('carfaxBox').innerHTML = Object.entries(carfaxSummary).map(([k,v])=>`<div class="stat"><span><strong>${k}</strong></span><span>${Array.isArray(v)?v.join(', '):v}</span></div>`).join(''); refreshOffer(); }
+}
 
-    function historyBox(h){ const acc=h?.accidents??'—', owners=h?.owners??'—', svc=h?.serviceRecords??'—'; return `<div><h4 style="font-size:18px">History</h4><div class="card card-history" style="padding:12px"><div class="stat"><span><strong>Accidents</strong></span><span>${acc}</span></div><div class="stat"><span><strong>Owners</strong></span><span>${owners}</span></div><div class="stat"><span><strong>Service Records</strong></span><span>${svc}</span></div></div></div>`; }
+async function applyMaintenance(){
+  const year = decoded.year || 0;
+  const mileage = Number(document.getElementById('miles').value||0);
+  const body = { summary: carfaxSummary||{}, text: carfaxText||'', mileage, year };
+  const res = await fetch('/api/infer/maintenance',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
+  if (res && res.ok){
+    // Merge with existing, dedup by key
+    const seen = new Set(maintItems.map(x=>x.key||x.label));
+    res.items.forEach(it=>{ const k=it.key||it.label; if(!seen.has(k)){ seen.add(k); maintItems.push(it); } });
+    renderMaint(); refreshOffer();
+  }
+}
 
-    function maintenanceBox(m){ const up=(m&&Array.isArray(m.upcoming))?m.upcoming.map(x=>`<li>${x}</li>`).join(''):'<li>—</li>'; const intervals=(m&&m.intervals)?Object.entries(m.intervals).map(([k,v])=>`<li><strong>${k}:</strong> ${v}</li>`).join(''):''; return `<div><h4 style="font-size:18px">Maintenance</h4><div class="card card-maint" style="padding:12px"><div style="display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-bottom:8px"><button class="btn" onclick="fetchCommonIssues()">Get Common Issues</button><button class="btn secondary" onclick="fetchTSBs()">Get TSBs</button></div><div id="commonIssuesCallout" style="display:none; border-left:4px solid #F59E0B; background:rgba(245,158,11,.07); padding:10px; border-radius:10px; margin-bottom:8px"><strong>Heads up:</strong> <span id="commonNote"></span></div><div id="tsbBox" style="display:none; margin-top:8px; border-left:4px solid #6366F1; background:rgba(99,102,241,.08); padding:10px; border-radius:10px"><div class="muted" style="text-transform:uppercase; letter-spacing:.12em">Technical Service Bulletins</div><div id="tsbCount" class="muted"></div><ul id="tsbList" style="margin-top:6px"></ul></div><div class="muted" style="margin-top:8px"><strong>Upcoming</strong><ul>${up}</ul><strong>Intervals</strong><ul>${intervals}</ul></div></div></div>`; }
+function renderMaint(){
+  const tbody=document.getElementById('maintRows');
+  if (!maintItems.length){ tbody.innerHTML='<tr><td class="muted" colspan="3">No items yet.</td></tr>'; setText('maintTotal', fmt(0)); return; }
+  tbody.innerHTML = maintItems.map(it=>`<tr><td>${it.label}</td><td style="text-align:right">${fmt(it.amount)}</td><td class="muted">${Array.isArray(it.rationale)?it.rationale.join(' • '):(it.rationale||'')}</td></tr>`).join('');
+  setText('maintTotal', fmt(maintItems.reduce((s,it)=>s+Number(it.amount||0),0)));
+}
+function renderRecon(){
+  const tbody=document.getElementById('reconRows');
+  if (!reconItems.length){ tbody.innerHTML='<tr><td class="muted" colspan="3">No additional costs.</td></tr>'; setText('reconTotal', fmt(0)); return; }
+  tbody.innerHTML = reconItems.map((it,i)=>`<tr><td>${it.label}</td><td style="text-align:right">${fmt(it.amount)}</td><td><button class="btn ghost" onclick="removeRecon(${i})">Remove</button></td></tr>`).join('');
+  setText('reconTotal', fmt(reconItems.reduce((s,it)=>s+Number(it.amount||0),0)));
+}
+function quick(label, amount, key){ reconItems.push({ label, amount, key }); renderRecon(); refreshOffer(); }
+function addRecon(){
+  const label=(document.getElementById('reconLabel').value||'').trim();
+  const amt=Number(document.getElementById('reconAmt').value||0);
+  if (!label || !amt) return;
+  reconItems.push({ label, amount: amt, key: label.toLowerCase().replace(/[^a-z0-9]+/g,'_') });
+  document.getElementById('reconLabel').value=''; document.getElementById('reconAmt').value='';
+  renderRecon(); refreshOffer();
+}
+function removeRecon(i){ reconItems.splice(i,1); renderRecon(); refreshOffer(); }
 
-    async function lookup(){
-      const vin=document.getElementById('vin').value.trim(); if(!vin) return alert('Enter a VIN');
-      try {
-        const d = await fetch(`/api/vin/${encodeURIComponent(vin)}`).then(r=>r.json());
-        if (d && d.ok) { window._decodedYear = Number(d.year||0); document.getElementById('decodedBanner').innerHTML = vehicleBanner(d); }
-      } catch {}
-      const miles = Number(document.getElementById('mileage').value||0);
-      const year = window._decodedYear || 0;
-      valuation = await fetch(`/api/value/${vin}?mileage=${encodeURIComponent(miles)}&year=${encodeURIComponent(year)}`).then(r=>r.json());
-      history = await fetch(`/api/history/${vin}`).then(r=>r.json());
-      maintenance = await fetch(`/api/maintenance/${vin}`).then(r=>r.json());
-      adjustedWholesale=null; gapItems=[];
-      document.getElementById('results').innerHTML = valueBox(valuation) + historyBox(history) + maintenanceBox(maintenance);
-    }
+async function getEvidence(){
+  const vin=document.getElementById('vin').value.trim();
+  const vehicle=document.getElementById('vehicleBanner').innerText.trim();
+  const res=await fetch('/api/evidence/score',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle })}).then(r=>r.json());
+  if (!res || !res.ok) { alert('Evidence fetch failed'); return; }
+  evidence = res;
+  document.getElementById('riskBadge').textContent = `Recalls ${res.counts.recalls} • Complaints ${res.counts.complaints} • TSBs ${res.counts.tsbs}`;
+  document.getElementById('riskList').innerHTML = (res.topRisks||[]).map(r=>`<li><strong>${r.label}</strong> — score ${r.score} <span class="muted">(${r.rationale})</span>${(Array.isArray(r.checks)&&r.checks.length)?('<ul>'+r.checks.map(c=>`<li class="muted">${c}</li>`).join('')+'</ul>'):''}</li>`).join('') || '<li class="muted">No notable risks.</li>';
+  refreshOffer();
+}
+function applyRisksToRecon(){
+  if (!evidence) return alert('Get evidence first');
+  const labels = new Set(reconItems.map(x=>x.key||x.label).concat(maintItems.map(x=>x.key||x.label)));
+  let added = 0;
+  const map = {
+    'Engine / Oil consumption': [{label:'Oil change', amount:60, key:'oil_change'},{label:'Engine air filter', amount:45, key:'engine_air_filter'}],
+    'Transmission': [{label:'Transmission service', amount:250, key:'transmission_service'}],
+    'Electrical': [{label:'Battery', amount:180, key:'battery'}],
+    'Brakes': [{label:'Brakes (pads/rotors est.)', amount:450, key:'brakes'}],
+    'HVAC / A/C': [{label:'A/C service', amount:150, key:'ac_service'}]
+  };
+  (evidence.topRisks||[]).forEach(r=>{
+    (map[r.label]||[]).forEach(it=>{ if(!labels.has(it.key)){ reconItems.push(it); labels.add(it.key); added++; } });
+  });
+  renderRecon(); refreshOffer();
+  if (!added) alert('No new recon items (already applied).');
+}
 
-    async function uploadCarfax(){
-      const file=document.getElementById('carfax').files[0]; if(!file) return alert('Choose a PDF first');
-      const fd=new FormData(); fd.append('file', file); document.getElementById('carfaxSpin').style.display='inline';
-      const res=await fetch('/api/carfax/upload',{method:'POST',body:fd}).then(r=>r.json()).catch(()=>null);
-      document.getElementById('carfaxSpin').style.display='none';
-      if(!res){ alert('Upload failed'); return; }
-      if(res.url){ carfaxUrl=res.url; document.getElementById('carfaxUrl').innerHTML=`Uploaded: <a href="${res.url}" target="_blank">${res.url}</a>`; }
-      carfaxSummary=res.summary; carfaxText=res.text||'';
-      if(carfaxSummary && !carfaxSummary.note){ document.getElementById('carfaxSummaryBox').innerHTML = carfaxBox(carfaxSummary); }
-      else { document.getElementById('carfaxSummaryBox').innerHTML = `<div class="card"><strong>Carfax Summary</strong><div class="muted">No text extracted. Use <b>OCR scanned PDF</b> or paste the text below.</div></div>`; }
-    }
+async function refreshOffer(){
+  const payload = { valuation, maintenanceItems: maintItems, reconItems, risks: evidence? (evidence.topRisks||[]) : [] };
+  payload.baseWholesale = valuation?.wholesale ?? null;
+  const res = await fetch('/api/offer/calc',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).then(r=>r.json());
+  if (!res || !res.ok) return;
+  calc = res.numbers;
+  maintItems = res.items.maintenance; reconItems = res.items.recon;
+  renderMaint(); renderRecon();
+  // Sticky
+  setText('sRetail', fmt(calc.retailBase)); setText('sWhole', fmt(calc.wholesaleBase)); setText('sMaint', '-'+fmt(calc.maintDeduction)); setText('sRecon', fmt(calc.reconTotal)); setText('sRisk', fmt(calc.riskReserve)); setText('sMax', fmt(calc.targetMaxBuy));
+  // Offer card
+  setText('oRetail', fmt(calc.retailBase)); setText('oWhole', fmt(calc.wholesaleBase)); setText('oMaint', '-'+fmt(calc.maintDeduction)); setText('oAdj', fmt(calc.adjWholesale)); setText('oRecon', fmt(calc.reconTotal)); setText('oRisk', fmt(calc.riskReserve)); setText('oHold', fmt((calc.holding||0)+(calc.fees||0))); setText('oMax', fmt(calc.targetMaxBuy));
+  // Proof panels
+  document.getElementById('proofCarfax').textContent = JSON.stringify(carfaxSummary||{},null,2);
+  document.getElementById('proofEvidence').textContent = JSON.stringify(evidence||{},null,2);
+}
 
-    function carfaxBox(s){
-      const entries = Object.entries(s||{}).filter(([k,v]) => k!=='note' && v && ((Array.isArray(v)&&v.length) || (!Array.isArray(v))));
-      if (!entries.length) return '<div class="card"><em>No Carfax summary extracted.</em></div>';
-      const html = entries.map(([k,v]) => `<div class="stat"><span><strong>${k}</strong></span><span>${Array.isArray(v)?v.join(', '):String(v)}</span></div>`).join('');
-      return `<div class="card"><div class="muted" style="text-transform:uppercase;letter-spacing:.12em">Carfax</div><h3>Summary</h3>${html}</div>`;
-    }
+async function printPdf(){
+  if (!valuation || !calc) { alert('Run through the steps first.'); return; }
+  const vin = document.getElementById('vin').value.trim();
+  const body = { vin, vehicle: document.getElementById('vehicleBanner').innerText.trim(), valuation, calc, items: { maintenance: maintItems, recon: reconItems }, carfaxUrl };
+  const res = await fetch('/api/report/customer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
+  if (res && res.url) window.open(res.url, '_blank'); else alert('PDF failed');
+}
 
-    async function summarizeCarfaxText(){
-      const raw = document.getElementById('carfaxPaste').value||'';
-      if (!raw.trim()) return alert('Paste Carfax text first');
-      const res = await fetch('/api/carfax/summarize-text', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rawText: raw }) }).then(r=>r.json());
-      if (res.ok) { carfaxSummary = res.summary; document.getElementById('carfaxSummaryBox').innerHTML = carfaxBox(carfaxSummary); }
-    }
+/* Settings modal */
+function openSettings(){ loadSettings(); document.getElementById('settingsModal').style.display='flex'; }
+function closeSettings(){ document.getElementById('settingsModal').style.display='none'; }
+async function loadSettings(){
+  const res = await fetch('/api/settings').then(r=>r.json());
+  const s = res.settings || {};
+  document.getElementById('sLabor').value = s.laborRate||0;
+  document.getElementById('sParts').value = s.partsMultiplier||1;
+  document.getElementById('sProfit').value = s.desiredProfit||0;
+  document.getElementById('sDays').value = s.daysToTurn||0;
+  document.getElementById('sApr').value = s.floorplanAPR||0;
+  document.getElementById('sTrans').value = s.avgTransport||0;
+  document.getElementById('sMkt').value = s.marketingFees||0;
+  document.getElementById('sWar').value = s.warrantyReserve||0;
+  document.getElementById('sCap').value = s.riskReserveCapPct||0.15;
+  const grid = document.getElementById('riskWeightsGrid');
+  grid.innerHTML='';
+  Object.entries(s.riskWeights||{}).forEach(([k,v])=>{
+    const div=document.createElement('div'); div.className='card';
+    div.innerHTML = `<label>${k}</label><input data-key="${k}" value="${v}" type="number" step="1">`;
+    grid.appendChild(div);
+  });
+}
+async function saveSettings(){
+  const payload = {
+    laborRate: Number(document.getElementById('sLabor').value||0),
+    partsMultiplier: Number(document.getElementById('sParts').value||1),
+    desiredProfit: Number(document.getElementById('sProfit').value||0),
+    daysToTurn: Number(document.getElementById('sDays').value||0),
+    floorplanAPR: Number(document.getElementById('sApr').value||0),
+    avgTransport: Number(document.getElementById('sTrans').value||0),
+    marketingFees: Number(document.getElementById('sMkt').value||0),
+    warrantyReserve: Number(document.getElementById('sWar').value||0),
+    riskReserveCapPct: Number(document.getElementById('sCap').value||0.15),
+    riskWeights: {}
+  };
+  document.querySelectorAll('#riskWeightsGrid input').forEach(inp=>{
+    payload.riskWeights[inp.getAttribute('data-key')] = Number(inp.value||0);
+  });
+  const res = await fetch('/api/settings',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).then(r=>r.json());
+  if (res && res.ok) { closeSettings(); refreshOffer(); }
+}
 
-    async function ocrLocal(){
-      const file=document.getElementById('carfax').files[0]; if(!file) return alert('Choose a PDF or image first');
-      const isPdf = /pdf$/i.test(file.type) || /\.pdf$/i.test(file.name);
-      document.getElementById('carfaxSummaryBox').innerHTML = '<div class="muted">OCR in progress…</div>';
-      let text = '';
-      if (!isPdf) {
-        const imgURL = URL.createObjectURL(file);
-        const { data: { text: ocrText } } = await Tesseract.recognize(imgURL, 'eng');
-        text = ocrText; URL.revokeObjectURL(imgURL);
-      } else {
-        const arrayBuf = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
-        const maxPages = Math.min(pdf.numPages, 5);
-        for (let p = 1; p <= maxPages; p++) {
-          const page = await pdf.getPage(p);
-          const viewport = page.getViewport({ scale: 1.5 });
-          const canvas = document.createElement('canvas');
-          canvas.width = viewport.width; canvas.height = viewport.height;
-          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-          const { data: { text: otext } } = await Tesseract.recognize(canvas, 'eng');
-          text += '\\n\\n' + otext;
-        }
-      }
-      if (!text.trim()) { document.getElementById('carfaxSummaryBox').innerHTML = '<div class="muted">OCR returned no text.</div>'; return; }
-      const res = await fetch('/api/carfax/summarize-text', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rawText: text }) }).then(r=>r.json());
-      if (res.ok) { carfaxSummary = res.summary; document.getElementById('carfaxSummaryBox').innerHTML = carfaxBox(carfaxSummary); }
-      else { document.getElementById('carfaxSummaryBox').innerHTML = '<div class="muted">Failed to summarize OCR text.</div>'; }
-    }
-
-    async function applyMaintenanceDeduction(){
-      if (!valuation) return alert('Run a VIN lookup first.');
-      const body = { baseWholesale: Number(valuation?.wholesale||0), carfaxSummary: carfaxSummary||{}, carfaxText: carfaxText||'', mileage: Number(document.getElementById('mileage').value||0), year: (window._decodedYear||0) || 0 };
-      const res = await fetch('/api/value/adjusted', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
-      if (!res.ok) return alert('Could not calculate maintenance deduction');
-      adjustedWholesale = res.adjustedWholesale; gapItems = res.items||[];
-      document.getElementById('results').innerHTML = valueBox(valuation) + historyBox(history) + maintenanceBox(maintenance);
-    }
-
-    function moneyFmt(n){ return '$'+Number(n||0).toLocaleString(); }
-    function quickAdd(label, amount){ costItems.push({label, amount}); renderCosts(); }
-    function addCost(){
-      const label = (document.getElementById('costLabel').value||'').trim();
-      const amount = Number(document.getElementById('costAmount').value||0);
-      if(!label || !amount){ alert('Enter an item and amount'); return; }
-      costItems.push({label, amount}); document.getElementById('costLabel').value=''; document.getElementById('costAmount').value='';
-      renderCosts();
-    }
-    function removeCost(i){ costItems.splice(i,1); renderCosts(); }
-    function renderCosts(){
-      const rows = costItems.map((it,i)=>`<tr><td>${it.label}</td><td style="text-align:right">${moneyFmt(it.amount)}</td><td><button class="btn secondary" onclick="removeCost(${i})">Remove</button></td></tr>`).join('');
-      document.getElementById('costRows').innerHTML = rows || '<tr><td colspan="3" class="muted">No additional costs added.</td></tr>';
-      const total = costItems.reduce((s,it)=>s+Number(it.amount||0),0);
-      document.getElementById('reconTotal').innerText = moneyFmt(total);
-      if (window.valuation) document.getElementById('results').innerHTML = valueBox(valuation) + historyBox(history) + maintenanceBox(maintenance);
-    }
-
-    async function fetchCommonIssues(){
-      const vin = document.getElementById('vin').value.trim();
-      const vehicle = document.getElementById('decodedBanner').innerText.trim();
-      const res = await fetch('/api/maintenance/common-issues', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle }) }).then(r=>r.json());
-      if (!res || !res.ok){ alert('Could not fetch common issues'); return; }
-      const issues = res.issues || [];
-      const note = res.note || '';
-      if (note){ const callout = document.getElementById('commonIssuesCallout'); document.getElementById('commonNote').innerText = note; callout.style.display='block'; }
-      const listHtml = issues.map(i => `<li><strong>${i.title}</strong>${i.details?(' — ' + i.details):''}</li>`).join('');
-      const maintCard = document.querySelector('.card.card-maint');
-      const ul = document.createElement('ul'); ul.innerHTML = listHtml;
-      maintCard.appendChild(ul);
-    }
-
-    async function fetchTSBs(){
-      const vin = document.getElementById('vin').value.trim();
-      let vehicle = ''; try { vehicle = document.getElementById('decodedBanner').innerText.trim(); } catch {}
-      const res = await fetch('/api/maintenance/tsb', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle }) }).then(r=>r.json());
-      if (!res || !res.ok){ alert('Could not fetch TSBs'); return; }
-      const box = document.getElementById('tsbBox');
-      box.style.display = 'block';
-      document.getElementById('tsbCount').innerText = `${res.count||0} bulletin(s) found for ${res.year||''} ${res.make||''} ${res.model||''}`;
-      const items = res.items || [];
-      const list = items.map(i => `<li><strong>${i.title||'TSB'}</strong>${i.summary?(' — ' + i.summary):''}</li>`).join('');
-      document.getElementById('tsbList').innerHTML = list || '<li class="muted">No bulletins returned.</li>';
-    }
-
-    async function fetchEvidence(){
-      const vin = document.getElementById('vin').value.trim();
-      let vehicle = ''; try { vehicle = document.getElementById('decodedBanner').innerText.trim(); } catch {}
-      const res = await fetch('/api/evidence/score', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle }) }).then(r=>r.json());
-      if (!res || !res.ok) { alert('Could not fetch evidence'); return; }
-      _evidence = res;
-      const bR = document.getElementById('badgeRecalls'); bR.style.display='inline-block'; bR.innerText = `Recalls: ${res.counts?.recalls ?? 0}`;
-      const bC = document.getElementById('badgeComplaints'); bC.style.display='inline-block'; bC.innerText = `Complaints: ${res.counts?.complaints ?? 0}`;
-      const bT = document.getElementById('badgeTSB'); bT.style.display='inline-block'; bT.innerText = `TSBs: ${res.counts?.tsbs ?? 0}`;
-      const risks = res.topRisks || [];
-      document.getElementById('riskList').innerHTML = risks.map(r => `<li><strong>${r.label}</strong> — score ${r.score} <span class="muted">(${r.rationale})</span>${(Array.isArray(r.checks)&&r.checks.length)?('<ul>'+r.checks.map(c=>`<li>${c}</li>`).join('')+'</ul>'):''}</li>`).join('') || '<li class="muted">No notable risks found.</li>';
-    }
-
-    function applyEvidenceToRecon(){
-      if (!_evidence) { alert('Run Get Evidence first'); return; }
-      const recs = _evidence.recommendations || [];
-      if (!Array.isArray(recs) || !recs.length){ alert('No recon suggestions from evidence'); return; }
-      const labels = new Set(costItems.map(x=>x.label).concat((gapItems||[]).map(x=>x.label)));
-      let skipped=0, added=0;
-      recs.forEach(it => { if (!labels.has(it.label)) { costItems.push(it); labels.add(it.label); added++; } else { skipped++; } });
-      renderCosts();
-      if (skipped) console.log(`Skipped ${skipped} duplicate suggestion(s)`);
-      alert('Top risk suggestions added to Recon.');
-    }
-
-    async function printCustomerPDF(){
-      const vin = document.getElementById('vin').value.trim();
-      if (!vin) return alert('Enter a VIN first');
-      const miles = Number(document.getElementById('mileage').value||0);
-      let vehicle = '';
-      try { const b = document.getElementById('decodedBanner').innerText.trim(); if (b) vehicle = b.replace(/\\s+/g, ' '); } catch {}
-      const body = {
-        vin, vehicle, mileage: miles,
-        valuation: valuation || {},
-        adjustedWholesale: (typeof adjustedWholesale === 'number') ? adjustedWholesale : null,
-        deduction: Array.isArray(gapItems)? gapItems.reduce((s,it)=>s+Number(it.amount||0),0) : 0,
-        gapItems: gapItems || [],
-        carfaxSummary: carfaxSummary || {},
-        carfaxUrl: carfaxUrl || '',
-        additionalCosts: costItems || [],
-        evidence: _evidence || null
-      };
-      const res = await fetch('/api/report/customer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
-      if (res && res.url) window.open(res.url, '_blank'); else alert('Could not generate PDF');
-    }
-  </script>
+/* eBay comps */
+function getCompQuery(){ return { year: decoded.year||'', make: decoded.make||'', model: decoded.model||'', trim: decoded.trim||'', zip: document.getElementById('compZip').value.trim(), radius: document.getElementById('compRadius').value }; }
+async function fetchSold(){
+  const q=getCompQuery(); const qs=new URLSearchParams(q).toString();
+  const res=await fetch('/api/comps/ebay/sold?'+qs).then(r=>r.json());
+  if(!res||!res.ok){ alert('SOLD comps fetch failed (set EBAY_APP_ID env var)'); return; }
+  const s=res.stats; setText('soldStats', s.count? `n=${s.count} • p25 ${fmt(s.p25)} • median ${fmt(s.median)} • p75 ${fmt(s.p75)}` : 'No results');
+  document.getElementById('soldList').innerHTML=(res.items||[]).slice(0,30).map(it=>`<li><a href="${it.url}" target="_blank">${it.title}</a> — ${fmt(it.price)}</li>`).join('');
+}
+async function fetchActive(){
+  const q=getCompQuery(); const qs=new URLSearchParams(q).toString();
+  const res=await fetch('/api/comps/ebay/active?'+qs).then(r=>r.json());
+  if(!res||!res.ok){ alert('ACTIVE comps fetch failed (set EBAY_APP_ID env var)'); return; }
+  const s=res.stats; setText('activeStats', s.count? `n=${s.count} • p25 ${fmt(s.p25)} • median ${fmt(s.median)} • p75 ${fmt(s.p75)}` : 'No results');
+  document.getElementById('activeList').innerHTML=(res.items||[]).slice(0,30).map(it=>`<li><a href="${it.url}" target="_blank">${it.title}</a> — ${fmt(it.price)}</li>`).join('');
+}
+function useSoldMedian(){
+  const txt=document.getElementById('soldStats').textContent||'';
+  const m = txt.match(/median \$([0-9,]+)/i);
+  if(!m){ alert('Fetch SOLD comps first'); return; }
+  const val = Number(m[1].replace(/,/g,''));
+  if(!valuation) valuation={ retail: val, wholesale: Math.round(val*0.86) };
+  valuation.retail = val;
+  setText('vRetail', fmt(valuation.retail));
+  refreshOffer();
+}
+</script>
 </body>
 </html>

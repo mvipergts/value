@@ -6,16 +6,11 @@ const path = require('path');
 const fs = require('fs');
 const PDFDocument = require('pdfkit');
 const pdfParse = require('pdf-parse');
-const OpenAI = require('openai');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
-const MOCK = process.env.OPENAI_MOCK === '1';
-const AI_ENABLED = !!openai && !MOCK;
-
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '12mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
@@ -23,78 +18,44 @@ const uploadDir = path.join(__dirname, 'uploads');
 const reportsDir = path.join(__dirname, 'reports');
 const dataDir = path.join(__dirname, 'data');
 [uploadDir, reportsDir, dataDir].forEach(d => { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); });
-
 app.use('/uploads', express.static(uploadDir));
 app.use('/reports', express.static(reportsDir));
 
+// ---------- SETTINGS ----------
+const settingsFile = path.join(dataDir, 'settings.json');
+if (!fs.existsSync(settingsFile)) {
+  fs.writeFileSync(settingsFile, JSON.stringify({
+    laborRate: 120, partsMultiplier: 1.0, desiredProfit: 1500, daysToTurn: 30,
+    floorplanAPR: 0.10, avgTransport: 150, marketingFees: 85, warrantyReserve: 0,
+    riskWeights: {
+      "Engine / Oil consumption": 100,"Transmission": 120,"Electrical": 60,"Brakes": 50,"HVAC / A/C": 40,
+      "Airbags / SRS": 80,"Steering": 70,"Suspension": 70,"Fuel system": 70,"Paint / Exterior": 30
+    },
+    riskReserveCapPct: 0.15, allowSerpAPI: false
+  }, null, 2));
+}
+const readSettings = () => JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+const writeSettings = (obj) => fs.writeFileSync(settingsFile, JSON.stringify(obj, null, 2));
+
+app.get('/api/settings', (req, res) => { try{ res.json({ ok:true, settings: readSettings() }); } catch(e){ res.status(500).json({ ok:false }); } });
+app.post('/api/settings', (req, res) => { try{ const cur=readSettings(); const next={...cur, ...(req.body||{})}; writeSettings(next); res.json({ ok:true, settings: next }); } catch(e){ res.status(500).json({ ok:false }); } });
+
+// ---------- Uploads ----------
 const storage = multer.diskStorage({
   destination: (_, __, cb) => cb(null, uploadDir),
   filename: (_, file, cb) => cb(null, Date.now() + '_' + file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_'))
 });
 const upload = multer({ storage });
 
-const storeFile = path.join(dataDir, 'appraisals.json');
-if (!fs.existsSync(storeFile)) fs.writeFileSync(storeFile, '[]');
-const readStore = () => JSON.parse(fs.readFileSync(storeFile, 'utf8'));
-const writeStore = (arr) => fs.writeFileSync(storeFile, JSON.stringify(arr, null, 2));
-
-function safeText(resp) {
-  try { if (resp.output_text) return resp.output_text; } catch {}
-  try { return resp.choices?.[0]?.message?.content || ''; } catch {}
-  return '';
+// ---------- Helpers ----------
+function expectedMileageByYear(year) {
+  const now = new Date().getFullYear();
+  const age = (year && year > 1900 && year <= now) ? (now - year) : 0;
+  return age * 12000;
 }
+function money(n){ return '$' + Number(n || 0).toLocaleString(); }
 
-// ---- Helpers ----
-function extractCarfaxSummary(text) {
-  const t = (text || '').replace(/\r/g, '');
-  const lower = t.toLowerCase();
-
-  let accidents = 0;
-  if (/no accidents? reported/i.test(t)) accidents = 0;
-  else {
-    const a1 = (t.match(/accident reported/gi) || []).length;
-    const a2 = (t.match(/accidents?\/damage/gi) || []).length;
-    accidents = Math.max(a1, a2);
-  }
-
-  const damageReports = (t.match(/damage reported/gi) || []).length;
-
-  let owners = 0;
-  const ownerHeader = (t.match(/owner\s+\d+/gi) || []).length;
-  const ownersLine = t.match(/owners?\s*:\s*(\d{1,2})/i);
-  owners = Math.max(owners, ownerHeader || 0);
-  if (ownersLine) owners = Math.max(owners, parseInt(ownersLine[1], 10));
-
-  const serviceRecords = (t.match(/service\s(record|history|performed|inspected|maintenance)/gi) || []).length;
-  const recalls = (t.match(/recall/gi) || []).length;
-
-  let lastOdometer = null;
-  const m1 = t.match(/last reported odometer.*?([0-9,]{3,})/i);
-  const m2 = t.match(/odometer.*?:\s*([0-9,]{3,})/i);
-  if (m1) lastOdometer = m1[1];
-  else if (m2) lastOdometer = m2[1];
-
-  const brandingKeywords = ['salvage','rebuilt','junk','flood','lemon','hail','fire','odometer rollback','not actual mileage','tmu','structural damage'];
-  const brandings = brandingKeywords.filter(k => lower.includes(k));
-
-  let usage = null;
-  if (lower.includes('personal vehicle')) usage = 'Personal';
-  else if (lower.includes('commercial vehicle')) usage = 'Commercial';
-  else if (lower.includes('fleet vehicle')) usage = 'Fleet';
-  else if (lower.includes('rental vehicle')) usage = 'Rental';
-  else if (lower.includes('lease vehicle')) usage = 'Lease';
-
-  return { accidents, damageReports, owners, serviceRecords, recalls, lastOdometer, usage, brandings };
-}
-
-const COST_MAP = {
-  "Oil change": 60, "Cabin filter": 40, "Engine air filter": 45,
-  "Tire rotation": 30, "Wheel alignment": 110, "Battery": 180,
-  "Brake fluid exchange": 120, "Coolant service": 180, "Transmission service": 250,
-  "Spark plugs": 250, "Wiper blades": 30
-};
-
-// ---- VIN decode ----
+// ---------- VIN ----------
 app.get('/api/vin/:vin', async (req, res) => {
   try {
     const vin = String(req.params.vin || '').trim();
@@ -102,528 +63,277 @@ app.get('/api/vin/:vin', async (req, res) => {
     const r = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`);
     const j = await r.json();
     const row = j?.Results?.[0] || {};
-    res.json({
-      ok: true, vin,
-      year: row.ModelYear || null,
-      make: row.Make || null,
-      model: row.Model || null,
-      trim: row.Trim || row.Series || null,
-      bodyClass: row.BodyClass || null
-    });
-  } catch (e) { res.status(500).json({ ok:false, error:'vin_failed' }); }
+    res.json({ ok:true, vin, year: row.ModelYear || null, make: row.Make || null, model: row.Model || null, trim: row.Trim || row.Series || null, bodyClass: row.BodyClass || null });
+  } catch(e){ res.status(500).json({ ok:false, error:'vin_failed' }); }
 });
 
-// ---- Value (mileage aware) ----
+// ---------- Values (heuristic) ----------
 app.get('/api/value/:vin', async (req, res) => {
   try {
     const mileage = Number(req.query.mileage || 0);
     const year = Number(req.query.year || 0);
-    const base = 12500;
-    const now = new Date().getFullYear();
-    const age = (year && year > 1900 && year <= now) ? (now - year) : 0;
-    const expected = age * 12000;
-    const delta = expected ? (mileage - expected) : 0;
-    const wholesale = Math.round((base * 0.90) - (delta * 0.06));
-    const retail = Math.round((base * 1.15) - (delta * 0.08));
-    res.json({ vin: req.params.vin, mileage, year, estimate: base, wholesale, retail, details:{ age, expected, delta } });
-  } catch (e) { res.json({ vin: req.params.vin, estimate: 12500, wholesale: 11250, retail: 14375, source: 'stub' }); }
+    const baseRetail = 14000;
+    const baseWholesale = 0.86 * baseRetail;
+    const expected = expectedMileageByYear(year);
+    const delta = mileage - expected;
+    const retail = Math.round(baseRetail - (delta * 0.08));
+    const wholesale = Math.round(baseWholesale - (delta * 0.06));
+    res.json({ vin: req.params.vin, mileage, year, retail, wholesale, method:'heuristic' });
+  } catch(e){ res.json({ vin: req.params.vin, retail: 12000, wholesale: 10000, method:'fallback' }); }
 });
 
-// ---- History/Maintenance stubs ----
-app.get('/api/history/:vin', (req, res) => res.json({ vin: req.params.vin, accidents: 0, owners: 2, serviceRecords: 7, source:'stub' }));
-app.get('/api/maintenance/:vin', (req, res) => res.json({ vin: req.params.vin, upcoming: ['Oil change','Cabin filter'], intervals:{'Oil change':'5k mi'}, source:'stub' }));
+// ---------- History & Maintenance (stubs) ----------
+app.get('/api/history/:vin', (req,res)=>res.json({ accidents:0, owners:2, serviceRecords:7 }));
+app.get('/api/maintenance/:vin', (req,res)=>res.json({ upcoming:['Oil change','Cabin filter'], intervals:{ 'Oil change':'5k mi' } }));
 
-// ---- Carfax upload + parse ----
-app.post('/api/carfax/upload', upload.single('file'), async (req, res) => {
+// ---------- Carfax parse ----------
+function extractCarfaxSummary(text){
+  const t = (text || '').replace(/\r/g, '');
+  const lower = t.toLowerCase();
+  const accidentHits = (t.match(/accident reported/gi) || []).length;
+  const damageReports = (t.match(/damage reported/gi) || []).length;
+  const owners = Math.max((t.match(/owner\s+\d+/gi) || []).length, (t.match(/owners?\s*:\s*(\d{1,2})/i)?.[1] ? parseInt((t.match(/owners?\s*:\s*(\d{1,2})/i))[1],10) : 0));
+  const serviceRecords = (t.match(/service\s(record|history|performed|inspected|maintenance)/gi) || []).length;
+  const recalls = (t.match(/recall/gi) || []).length;
+  const lastOdometer = (t.match(/last reported odometer.*?([0-9,]{3,})/i)?.[1]) || (t.match(/odometer.*?:\s*([0-9,]{3,})/i)?.[1]) || null;
+  const brandingKeywords = ['salvage','rebuilt','junk','flood','lemon','hail','fire','odometer rollback','not actual mileage','tmu','structural damage'];
+  const brandings = brandingKeywords.filter(k => lower.includes(k));
+  let usage = null;
+  if (lower.includes('personal vehicle')) usage = 'Personal';
+  else if (lower.includes('commercial vehicle')) usage = 'Commercial';
+  else if (lower.includes('fleet vehicle')) usage = 'Fleet';
+  else if (lower.includes('rental vehicle')) usage = 'Rental';
+  else if (lower.includes('lease vehicle')) usage = 'Lease';
+  return { accidents: accidentHits, damageReports, owners, serviceRecords, recalls, lastOdometer, usage, brandings };
+}
+app.post('/api/carfax/upload', upload.single('file'), async (req,res)=>{
   try {
     const buffer = fs.readFileSync(req.file.path);
     const parsed = await pdfParse(buffer);
     const text = parsed.text || '';
     const summary = text.trim() ? extractCarfaxSummary(text) : { note:'no_text_extracted' };
-    const url = `/uploads/${path.basename(req.file.path)}`;
-    res.json({ ok:true, path:req.file.path, url, summary, text });
-  } catch (e) {
-    const url = `/uploads/${path.basename(req.file.path)}`;
-    res.json({ ok:true, path:req.file.path, url, summary:{ error:'parse_failed' }, text:'' });
-  }
+    res.json({ ok:true, url:`/uploads/${path.basename(req.file.path)}`, summary, text });
+  } catch(e){ res.json({ ok:false, error:'parse_failed' }); }
+});
+app.post('/api/carfax/summarize-text', (req,res)=>{
+  try{ const { rawText='' } = req.body||{}; if(!rawText.trim()) return res.status(400).json({ ok:false, error:'no_text' }); res.json({ ok:true, summary: extractCarfaxSummary(rawText) }); }catch(e){ res.status(500).json({ ok:false }); }
 });
 
-// ---- Carfax summarize pasted text ----
-app.post('/api/carfax/summarize-text', async (req, res) => {
-  try {
-    const { rawText = '' } = req.body || {};
-    if (!rawText.trim()) return res.status(400).json({ ok:false, error:'no_text' });
-    const summary = extractCarfaxSummary(rawText);
-    res.json({ ok:true, summary });
-  } catch (e) { res.status(500).json({ ok:false, error:'summarize_failed' }); }
-});
-
-// ---- Maintenance gap inference (dedup + merged rationales) ----
-function inferMissingMaintenance({ summary = {}, text = '', mileage = 0, year = 0 }) {
-  const t = String(text || '').toLowerCase();
-  const m = Number(mileage || 0);
-  const now = new Date().getFullYear();
-  const age = (year && year > 1900 && year <= now) ? (now - year) : 0;
+// ---------- Maintenance inference ----------
+const COST_MAP = {
+  oil_change: 60, cabin_filter: 40, engine_air_filter: 45,
+  tire_rotation: 30, wheel_alignment: 110, battery: 180,
+  brake_fluid: 120, coolant: 180, transmission_service: 250,
+  spark_plugs: 250
+};
+function inferMaintenance({ summary={}, text='', mileage=0, year=0 }){
+  const t = String(text||'').toLowerCase();
+  const m = Number(mileage||0);
+  const expectedSvc = Math.max(2, Math.round((new Date().getFullYear() - (year||new Date().getFullYear())) * 1.2));
   const svcCount = Number(summary?.serviceRecords || 0);
-
   const map = new Map();
-  function push(label, rationale){
-    if (!map.has(label)) map.set(label, { label, rationale:[], source:'carfax_gap' });
-    map.get(label).rationale.push(rationale);
-  }
-  const has = (kw) => t.includes(kw);
-  const noneOf = (...kws) => !kws.some(has);
-
-  const expectedSvc = Math.max(2, Math.round(age * 1.2));
-  if (svcCount < expectedSvc / 2) {
-    push('Oil change', `Low service history (${svcCount}/${expectedSvc} expected)`);
-    push('Engine air filter', 'Low service history');
-    push('Cabin filter', 'Low service history');
-  }
-  if (noneOf('oil change','engine oil','changed oil')) push('Oil change', 'No oil change found in Carfax text');
-  if (m >= 60000) {
-    if (noneOf('transmission service','transmission fluid','trans fluid')) push('Transmission service','>=60k mi and no service noted');
-    if (noneOf('brake fluid')) push('Brake fluid exchange','>=60k mi and no service noted');
-    if (noneOf('coolant service','coolant flush','radiator flushed')) push('Coolant service','>=60k mi and no service noted');
-  }
-  if (m >= 90000 && noneOf('spark plug')) push('Spark plugs','>=90k mi and no plugs noted');
+  const add=(key,label,why)=>{ if(!map.has(key)) map.set(key,{ key,label,rationale:[],amount:COST_MAP[key]??100, source:'carfax_gap'}); map.get(key).rationale.push(why); };
+  const has=(kw)=>t.includes(kw); const noneOf=(...kws)=>!kws.some(has);
+  if (svcCount < expectedSvc/2){ add('oil_change','Oil change',`Low service history (${svcCount}/${expectedSvc} expected)`); add('engine_air_filter','Engine air filter','Low service history'); add('cabin_filter','Cabin filter','Low service history'); }
+  if (noneOf('oil change','engine oil','changed oil')) add('oil_change','Oil change','No oil change found in Carfax text');
+  if (m>=60000){ if(noneOf('transmission service','transmission fluid','trans fluid')) add('transmission_service','Transmission service','>=60k mi and no service noted'); if(noneOf('brake fluid')) add('brake_fluid','Brake fluid exchange','>=60k mi and no service noted'); if(noneOf('coolant service','coolant flush','radiator flushed')) add('coolant','Coolant service','>=60k mi and no service noted'); }
+  if (m>=90000 && noneOf('spark plug')) add('spark_plugs','Spark plugs','>=90k mi and no plugs noted');
   return Array.from(map.values());
 }
-
-// ---- Adjusted wholesale ----
-app.post('/api/value/adjusted', async (req, res) => {
+app.post('/api/infer/maintenance', (req,res)=>{
   try {
-    const { baseWholesale = 0, carfaxSummary = {}, carfaxText = '', mileage = 0, year = 0 } = req.body || {};
-    const items = inferMissingMaintenance({ summary: carfaxSummary, text: carfaxText, mileage, year });
-    const priced = items.map(it => ({ ...it, amount: (COST_MAP[it.label] ?? 100) }));
-    const deduction = priced.reduce((s, it) => s + Number(it.amount || 0), 0);
-    const adjustedWholesale = Math.max(0, Math.round(Number(baseWholesale || 0) - deduction));
-    res.json({ ok:true, baseWholesale: Number(baseWholesale||0), deduction, adjustedWholesale, items: priced });
-  } catch (e) { res.status(500).json({ ok:false, error:'adjust_failed' }); }
+    const items = inferMaintenance(req.body||{});
+    res.json({ ok:true, items });
+  } catch(e){ res.status(500).json({ ok:false, error:'infer_failed' }); }
 });
 
-// ---------- Common issues (NHTSA + optional web search; NO OpenAI required) ----------
-app.post('/api/maintenance/common-issues', async (req, res) => {
+// ---------- Evidence (NHTSA + TSB) ----------
+app.post('/api/evidence/score', async (req,res)=>{
   try {
-    const { vin='', vehicle='' } = req.body || {};
-    let year = null, make = null, model = null;
-    try {
-      const parts = (vehicle||'').split(/\s+/);
-      const y = parseInt(parts[0], 10);
-      if (!isNaN(y)) { year = y; make = parts[1] || null; model = parts[2] || null; }
-    } catch {}
-    if ((!year || !make || !model) && vin){
-      try {
-        const r = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`);
-        const j = await r.json();
-        const row = j?.Results?.[0] || {};
-        year = year || parseInt(row.ModelYear, 10) || null;
-        make = make || row.Make || null;
-        model = model || row.Model || null;
-      } catch {}
+    const { vin='', vehicle='' } = req.body||{};
+    let year=null, make=null, model=null;
+    if (vehicle){ const parts=vehicle.split(/\s+/); const y=parseInt(parts[0],10); if(!isNaN(y)){ year=y; make=parts[1]||null; model=parts[2]||null; } }
+    if ((!year||!make||!model) && vin){
+      try{ const r=await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`); const j=await r.json(); const row=j?.Results?.[0]||{}; year=year||parseInt(row.ModelYear,10)||null; make=make||row.Make||null; model=model||row.Model||null; } catch {}
     }
-
-    async function getJSON(url){
-      try { const r = await fetch(url); return await r.json(); }
-      catch(e){ return null; }
-    }
-
-    let recalls = [];
-    let complaints = [];
+    async function getJSON(url){ try{ const r=await fetch(url); return await r.json(); }catch(e){ return null; } }
+    let recalls=[], complaints=[], tsbs=[];
     if (make && model && year){
-      const rec = await getJSON(`https://api.nhtsa.gov/recalls/recallsByVehicle?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&modelYear=${encodeURIComponent(year)}`);
-      if (rec && rec.results) recalls = rec.results;
-      const cmp = await getJSON(`https://api.nhtsa.gov/Complaints/ByVehicle?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&modelYear=${encodeURIComponent(year)}`);
-      if (cmp && cmp.results) complaints = cmp.results;
+      const rec=await getJSON(`https://api.nhtsa.gov/recalls/recallsByVehicle?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&modelYear=${encodeURIComponent(year)}`);
+      if (rec && rec.results) recalls=rec.results;
+      const cmp=await getJSON(`https://api.nhtsa.gov/Complaints/ByVehicle?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&modelYear=${encodeURIComponent(year)}`);
+      if (cmp && cmp.results) complaints=cmp.results;
+      try{
+        const baseUrl='https://data.transportation.gov/resource/hczg-qbhf.json';
+        const hdrs={'Accept':'application/json'}; if (process.env.SOCRATA_APP_TOKEN) hdrs['X-App-Token']=process.env.SOCRATA_APP_TOKEN;
+        const url=`${baseUrl}?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&model_year=${encodeURIComponent(year)}&$limit=100`;
+        const r=await fetch(url,{ headers: hdrs }); const data=await r.json(); if(Array.isArray(data)) tsbs=data;
+      }catch{}
     }
-
-    const buckets = [
-      { key:'engine', label:'Engine / Oil consumption' },
-      { key:'trans', label:'Transmission' },
-      { key:'brake', label:'Brakes' },
-      { key:'air bag', label:'Airbags / SRS' },
-      { key:'electr', label:'Electrical' },
-      { key:'steering', label:'Steering' },
-      { key:'susp', label:'Suspension' },
-      { key:'fuel', label:'Fuel system' },
-      { key:'ac', label:'HVAC / A/C' },
-      { key:'paint', label:'Paint / Exterior' },
+    const buckets=[
+      {key:'engine',label:'Engine / Oil consumption'},{key:'trans',label:'Transmission'},{key:'brake',label:'Brakes'},
+      {key:'air bag',label:'Airbags / SRS'},{key:'electr',label:'Electrical'},{key:'steering',label:'Steering'},
+      {key:'susp',label:'Suspension'},{key:'fuel',label:'Fuel system'},{key:'ac',label:'HVAC / A/C'},{key:'paint',label:'Paint / Exterior'}
     ];
-    const counts = new Map();
-    complaints.forEach(c => {
-      const txt = `${c?.component || ''} ${c?.summary || ''} ${c?.narrative || ''}`.toLowerCase();
-      buckets.forEach(b => {
-        if (txt.includes(b.key)) counts.set(b.label, (counts.get(b.label)||0)+1);
-      });
-    });
-    const top = Array.from(counts.entries()).sort((a,b)=>b[1]-a[1]).slice(0,6);
-    const issues = top.map(([label,count]) => ({ title: label, details: `${count} complaint(s) in NHTSA database` }));
-
-    const noteParts = [];
-    if (recalls.length) noteParts.push(`${recalls.length} active/archived recall(s)`);
-    if (!issues.length && complaints.length) noteParts.push(`${complaints.length} complaints found (varied components)`);
-    const note = noteParts.join(' · ') || 'Data from NHTSA ODI (public).';
-
-    const SERP_API_KEY = process.env.SERP_API_KEY || '';
-    if (SERP_API_KEY && make && model) {
-      try {
-        const q = `${year||''} ${make} ${model} common problems`;
-        const resp = await fetch(`https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(q)}&num=5&api_key=${SERP_API_KEY}`);
-        const data = await resp.json();
-        const snippets = (data?.organic_results || []).map(r => r.snippet || '').join(' ').toLowerCase();
-        const add = [];
-        buckets.forEach(b => { if (snippets.includes(b.key)) add.push(b.label); });
-        add.slice(0,3).forEach(lbl => { if (!issues.find(i => i.title === lbl)) issues.push({ title: lbl, details: 'Mentioned across top web results' }); });
-      } catch {}
-    }
-
-    res.json({ ok:true, issues, note, source: 'nhtsa+web' });
-  } catch (e) {
-    console.error('common-issues (nhtsa) error', e);
-    res.status(500).json({ ok:false, error:'common_issues_failed' });
-  }
+    const lowerIncludes=(txt,n)=> (txt||'').toLowerCase().includes(n);
+    const buckCounts=new Map(), buckTSB=new Map(), buckRecall=new Map();
+    complaints.forEach(c=>{ const txt=`${c?.component||''} ${c?.summary||''} ${c?.narrative||''}`.toLowerCase(); buckets.forEach(b=>{ if(lowerIncludes(txt,b.key)) buckCounts.set(b.label,(buckCounts.get(b.label)||0)+1); }); });
+    tsbs.forEach(t=>{ const txt=`${t?.component||''} ${t?.system_type||''} ${t?.summary||''}`.toLowerCase(); buckets.forEach(b=>{ if(lowerIncludes(txt,b.key)) buckTSB.set(b.label,true); }); });
+    recalls.forEach(rc=>{ const txt=`${rc?.Component||''} ${rc?.Summary||''}`.toLowerCase(); buckets.forEach(b=>{ if(lowerIncludes(txt,b.key)) buckRecall.set(b.label,true); }); });
+    const scored=buckets.map(b=>{ const c=buckCounts.get(b.label)||0; const hasT=!!buckTSB.get(b.label), hasR=!!buckRecall.get(b.label); const score=(hasT?3:0)+(hasR?2:0)+Math.floor(c/10); const rationale=[hasT?'TSB present (+3)':null, hasR?'Recall mention (+2)':null, c?`${c} complaints (~+${Math.floor(c/10)})`:null].filter(Boolean).join(' · '); const checks=(()=>{ if (b.label.startsWith('Engine')) return ['Check oil consumption (qt/1k mi)','Scan for misfire codes']; if (b.label==='Transmission') return ['2→3 shift flare/judder','Fluid history']; if (b.label==='Electrical') return ['Battery/alt load test','Parasitic draw']; if (b.label==='Brakes') return ['Pad/rotor thickness','Fluid moisture %']; if (b.label==='HVAC / A/C') return ['Vent temp at idle & cruise','Compressor noise']; return []; })(); return { label:b.label, score, rationale, checks, complaints:c, tsb:hasT, recall:hasR }; }).filter(s=>s.score>0).sort((a,b)=>b.score-a.score).slice(0,5);
+    res.json({ ok:true, counts:{recalls:recalls.length, complaints:complaints.length, tsbs:tsbs.length}, topRisks:scored });
+  } catch(e){ res.status(500).json({ ok:false, error:'evidence_failed' }); }
 });
 
-// ---------- TSB via DOT Socrata ----------
-app.post('/api/maintenance/tsb', async (req, res) => {
+// ---------- Offer calc ----------
+app.post('/api/offer/calc', (req,res)=>{
   try {
-    const { vin='', vehicle='' } = req.body || {};
-    let year = null, make = null, model = null;
-    try {
-      const parts = (vehicle||'').split(/\s+/);
-      const y = parseInt(parts[0], 10);
-      if (!isNaN(y)) { year = y; make = parts[1] || null; model = parts[2] || null; }
-    } catch {}
-    if ((!year || !make || !model) && vin){
-      try {
-        const r = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`);
-        const j = await r.json();
-        const row = j?.Results?.[0] || {};
-        year = year || parseInt(row.ModelYear, 10) || null;
-        make = make || row.Make || null;
-        model = model || row.Model || null;
-      } catch {}
-    }
-    if (!year || !make || !model) return res.status(400).json({ ok:false, error:'need_year_make_model' });
-
-    const baseUrl = 'https://data.transportation.gov/resource/hczg-qbhf.json';
-    const url = `${baseUrl}?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&model_year=${encodeURIComponent(year)}&$limit=50`;
-    const headers = { 'Accept': 'application/json' };
-    if (process.env.SOCRATA_APP_TOKEN) headers['X-App-Token'] = process.env.SOCRATA_APP_TOKEN;
-
-    let data = [];
-    try {
-      const r = await fetch(url, { headers });
-      data = await r.json();
-      if (!Array.isArray(data)) data = [];
-    } catch (e) {
-      return res.status(502).json({ ok:false, error:'tsb_fetch_failed' });
-    }
-
-    const items = data.map(d => {
-      const title = d.component || d.system_type || 'TSB';
-      const tsbNum = d.bulletin_number || d.tsb_number || d.nhtsa_tsb_number || '';
-      const summary = d.summary || d.bulletin_summary || d.bulletinsummary || d.description || '';
-      return { title: tsbNum ? `${title} (${tsbNum})` : title, summary };
-    }).slice(0, 25);
-
-    res.json({ ok:true, year, make, model, count: items.length, items, source: 'nhtsa-tsb (DOT Socrata)' });
-  } catch (e) {
-    console.error('tsb route error', e);
-    res.status(500).json({ ok:false, error:'tsb_error' });
-  }
+    const S = readSettings();
+    const { valuation={}, maintenanceItems=[], reconItems=[], risks=[], baseWholesale=null } = req.body||{};
+    const wholesaleBase = (baseWholesale!=null) ? Number(baseWholesale) : Number(valuation?.wholesale || 0);
+    const retailBase = Number(valuation?.retail || 0);
+    const seen=new Set();
+    const dedupMaint=[]; for(const it of (maintenanceItems||[])){ const k=it.key||it.label; if(!seen.has(k)){ seen.add(k); dedupMaint.push(it);} }
+    const dedupRecon=[]; for(const it of (reconItems||[])){ const k=it.key||it.label; if(seen.has(k)) continue; seen.add(k); dedupRecon.push(it); }
+    const maintDeduction=dedupMaint.reduce((s,it)=>s+Number(it.amount||0),0);
+    const reconTotal=dedupRecon.reduce((s,it)=>s+Number(it.amount||0),0);
+    let riskReserve=0; for(const r of (risks||[])){ const weight=S.riskWeights[r.label] ?? 50; riskReserve += (r.score||0)*weight; }
+    const cap=(wholesaleBase||0)*(S.riskReserveCapPct||0.15); riskReserve=Math.min(riskReserve, cap);
+    const adjWholesale=Math.max(0, Math.round(wholesaleBase - maintDeduction));
+    const holding=(S.floorplanAPR||0)*(S.daysToTurn||0)*(retailBase||0)/365;
+    const fees=(S.avgTransport||0)+(S.marketingFees||0)+(S.warrantyReserve||0);
+    const ceiling1 = adjWholesale - reconTotal - riskReserve;
+    const ceiling2 = (retailBase||0) - (S.desiredProfit||0) - reconTotal - holding - fees;
+    const targetMaxBuy = Math.floor(Math.max(0, Math.min(ceiling1, ceiling2)));
+    res.json({ ok:true, numbers:{ retailBase, wholesaleBase, maintDeduction, adjWholesale, reconTotal, riskReserve, holding:Math.round(holding), fees:Math.round(fees), targetMaxBuy }, items:{ maintenance: dedupMaint, recon: dedupRecon } });
+  } catch(e){ res.status(500).json({ ok:false, error:'offer_calc_failed' }); }
 });
 
-// ---------- Evidence (recalls+complaints+TSB) with risk scoring & checks ----------
-app.post('/api/evidence/score', async (req, res) => {
+// ---------- eBay comps (FREE Finding API) ----------
+const EBAY_APP_ID = process.env.EBAY_APP_ID || '';
+const EBAY_ENDPOINT = 'https://svcs.ebay.com/services/search/FindingService/v1';
+async function ebayFinding(operation, params){
+  if (!EBAY_APP_ID) return { error:'missing_app_id' };
+  const query = new URLSearchParams({
+    'OPERATION-NAME': operation,
+    'SERVICE-VERSION': '1.13.0',
+    'SECURITY-APPNAME': EBAY_APP_ID,
+    'GLOBAL-ID': 'EBAY-US',
+    'RESPONSE-DATA-FORMAT': 'JSON',
+    'REST-PAYLOAD': 'true',
+    ...params
+  });
+  const url = `${EBAY_ENDPOINT}?${query.toString()}`;
+  const r = await fetch(url, { headers:{ 'Accept':'application/json' } });
+  return await r.json();
+}
+function computeStats(arr){
+  const xs = arr.filter(v=>isFinite(v)).sort((a,b)=>a-b);
+  if(!xs.length) return { count:0, p25:null, median:null, p75:null };
+  const q = p => {
+    const pos = (xs.length - 1) * p;
+    const base = Math.floor(pos), rest = pos - base;
+    const next = xs[base+1] !== undefined ? xs[base+1] : xs[base];
+    return Math.round(xs[base] + (next - xs[base]) * rest);
+  };
+  return { count: xs.length, p25: q(0.25), median: q(0.5), p75: q(0.75) };
+}
+function titleMatches(title, {year,make,model,trim}){
+  const t = (title||'').toLowerCase();
+  if (year && !t.includes(String(year))) return false;
+  if (make && !t.includes(String(make).toLowerCase())) return false;
+  if (model && !t.includes(String(model).toLowerCase())) return false;
+  return true;
+}
+app.get('/api/comps/ebay/sold', async (req,res)=>{
   try {
-    const { vin='', vehicle='' } = req.body || {};
-
-    let year = null, make = null, model = null;
-    try {
-      const parts = (vehicle||'').trim().split(/\s+/);
-      const y = parseInt(parts[0], 10);
-      if (!isNaN(y)) { year = y; make = parts[1] || null; model = parts[2] || null; }
-    } catch {}
-    if ((!year || !make || !model) && vin){
-      try {
-        const r = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`);
-        const j = await r.json();
-        const row = j?.Results?.[0] || {};
-        year = year || parseInt(row.ModelYear, 10) || null;
-        make = make || row.Make || null;
-        model = model || row.Model || null;
-      } catch {}
-    }
-    if (!year || !make || !model) return res.status(400).json({ ok:false, error:'need_year_make_model' });
-
-    async function getJSON(url){ try { const r = await fetch(url); return await r.json(); } catch { return null; } }
-
-    let recalls = [];
-    let complaints = [];
-    const rec = await getJSON(`https://api.nhtsa.gov/recalls/recallsByVehicle?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&modelYear=${encodeURIComponent(year)}`);
-    if (rec && rec.results) recalls = rec.results;
-    const cmp = await getJSON(`https://api.nhtsa.gov/Complaints/ByVehicle?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&modelYear=${encodeURIComponent(year)}`);
-    if (cmp && cmp.results) complaints = cmp.results;
-
-    const baseUrl = 'https://data.transportation.gov/resource/hczg-qbhf.json';
-    let tsbs = [];
-    try {
-      const headers = { 'Accept': 'application/json' };
-      if (process.env.SOCRATA_APP_TOKEN) headers['X-App-Token'] = process.env.SOCRATA_APP_TOKEN;
-      const url = `${baseUrl}?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&model_year=${encodeURIComponent(year)}&$limit=100`;
-      const r = await fetch(url, { headers }); tsbs = await r.json(); if (!Array.isArray(tsbs)) tsbs = [];
-    } catch { tsbs = []; }
-
-    const buckets = [
-      { key:'engine', label:'Engine / Oil consumption' },
-      { key:'trans', label:'Transmission' },
-      { key:'brake', label:'Brakes' },
-      { key:'air bag', label:'Airbags / SRS' },
-      { key:'electr', label:'Electrical' },
-      { key:'steering', label:'Steering' },
-      { key:'susp', label:'Suspension' },
-      { key:'fuel', label:'Fuel system' },
-      { key:'ac', label:'HVAC / A/C' },
-      { key:'paint', label:'Paint / Exterior' },
-    ];
-    const lowerIncludes = (txt, needle) => (txt||'').toLowerCase().includes(needle);
-    const buckCounts = new Map();
-    const buckTSB = new Map();
-    const buckRecall = new Map();
-
-    complaints.forEach(c => {
-      const txt = `${c?.component || ''} ${c?.summary || ''} ${c?.narrative || ''}`.toLowerCase();
-      buckets.forEach(b => { if (lowerIncludes(txt, b.key)) buckCounts.set(b.label, (buckCounts.get(b.label)||0)+1); });
+    const { year, make, model, trim, zip, radius='500' } = req.query||{};
+    const keywords = [year, make, model, trim].filter(Boolean).join(' ');
+    const j = await ebayFinding('findCompletedItems', {
+      keywords,
+      'buyerPostalCode': zip || '',
+      'paginationInput.entriesPerPage': '100',
+      'itemFilter(0).name': 'SoldItemsOnly',
+      'itemFilter(0).value': 'true',
+      'itemFilter(1).name': 'MaxDistance',
+      'itemFilter(1).value': String(radius || '500')
     });
-
-    recalls.forEach(r => {
-      const txt = `${r?.Component || ''} ${r?.Summary || ''}`.toLowerCase();
-      buckets.forEach(b => { if (lowerIncludes(txt, b.key)) buckRecall.set(b.label, true); });
+    const items = j?.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item || [];
+    const cleaned = items.map(it=>{
+      const title = it.title?.[0] || '';
+      const price = parseFloat(it.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || '0');
+      const endTime = it.listingInfo?.[0]?.endTime?.[0] || null;
+      const url = it.viewItemURL?.[0] || null;
+      return { title, price, endTime, url };
+    }).filter(it=> it.price>0 && titleMatches(it.title,{year,make,model,trim}));
+    const stats = computeStats(cleaned.map(x=>x.price));
+    res.json({ ok:true, stats, items: cleaned });
+  } catch(e){ res.status(500).json({ ok:false, error:'ebay_failed' }); }
+});
+app.get('/api/comps/ebay/active', async (req,res)=>{
+  try {
+    const { year, make, model, trim, zip, radius='500' } = req.query||{};
+    const keywords = [year, make, model, trim].filter(Boolean).join(' ');
+    const j = await ebayFinding('findItemsAdvanced', {
+      keywords,
+      'buyerPostalCode': zip || '',
+      'paginationInput.entriesPerPage': '50',
+      'itemFilter(0).name': 'MaxDistance',
+      'itemFilter(0).value': String(radius || '500')
     });
-
-    tsbs.forEach(t => {
-      const txt = `${t?.component || ''} ${t?.system_type || ''} ${t?.summary || ''}`.toLowerCase();
-      buckets.forEach(b => { if (lowerIncludes(txt, b.key)) buckTSB.set(b.label, true); });
-    });
-
-    function makeChecks(label, recallText){
-      const checks = [];
-      const add = s => { if (!checks.includes(s)) checks.push(s); };
-      const rt = (recallText||'').toLowerCase();
-      if (label.startsWith('Engine')){
-        add('Check for excessive oil consumption (qt/1k mi), blue smoke, fouled plugs');
-        add('Scan for misfire codes; PCV/valve cover leaks');
-      } else if (label === 'Transmission'){
-        add('Test drive: look for 2→3 shift flare/harshness or delay (step-gear)');
-        add('If CVT: check for low-speed judder/slip; verify fluid service history');
-        if (rt.includes('shift') || rt.includes('gear')) add('Confirm TCM updates / recall remedies applied');
-      } else if (label === 'Brakes'){
-        add('Check pad/rotor thickness; pulsation under braking; fluid moisture %');
-      } else if (label === 'Airbags / SRS'){
-        add('Run SRS scan; verify recall completion; inspect warning lights');
-      } else if (label === 'Electrical'){
-        add('Battery/alternator load test; parasitic draw check');
-      } else if (label === 'Steering'){
-        add('Free play test; alignment/centering; EPS fault scan');
-      } else if (label === 'Suspension'){
-        add('Inspect struts, control arm bushings, sway links for play/leaks');
-      } else if (label === 'Fuel system'){
-        add('EVAP leak test; fuel pump noise/pressure; injector balance');
-      } else if (label === 'HVAC / A/C'){
-        add('Vent temp at idle and cruise; blend door operation; compressor noise');
-      } else if (label === 'Paint / Exterior'){
-        add('Inspect clear coat/oxidation; look for prior paintwork or panel mismatch');
-      }
-      return checks;
-    }
-
-    const recallText = (recalls||[]).map(r => (r.Component||'') + ' ' + (r.Summary||'')).join(' ').toLowerCase();
-    const scored = buckets.map(b => {
-      const c = buckCounts.get(b.label)||0;
-      const hasT = !!buckTSB.get(b.label);
-      const hasR = !!buckRecall.get(b.label);
-      const score = (hasT?3:0) + (hasR?2:0) + Math.floor(c/10);
-      const rationale = [
-        hasT ? 'TSB present (+3)' : null,
-        hasR ? 'Recall mention (+2)' : null,
-        c ? `${c} complaints (~+${Math.floor(c/10)})` : null
-      ].filter(Boolean).join(' · ');
-      const checks = makeChecks(b.label, recallText);
-      return { label: b.label, complaints: c, tsb: hasT, recall: hasR, score, rationale, checks };
-    }).filter(x => x.score > 0).sort((a,b)=>b.score-a.score).slice(0,5);
-
-    // Optional web corroboration (SerpAPI) adds +1 to matching buckets
-    const SERP_API_KEY = process.env.SERP_API_KEY || '';
-    const allow = ['nhtsa.gov','carcomplaints.com','repairpal.com','consumerreports.org','iihs.org','edmunds.com','kbb.com','cars.com'];
-    if (SERP_API_KEY) {
-      try {
-        const q = `${year} ${make} ${model} common problems`;
-        const resp = await fetch(`https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(q)}&num=10&api_key=${SERP_API_KEY}`);
-        const data = await resp.json();
-        const org = (data?.organic_results || []).filter(r => {
-          try { const u = new URL(r.link); return allow.some(d => u.hostname.includes(d)); } catch { return false; }
-        });
-        const snippets = org.map(r=> (r.snippet||'').toLowerCase()).join(' ');
-        buckets.forEach(b => {
-          if (snippets.includes(b.key)) {
-            const idx = scored.findIndex(s => s.label === b.label);
-            if (idx >= 0) { scored[idx].score += 1; scored[idx].rationale += ' · web corroboration (+1)'; }
-          }
-        });
-        scored.sort((a,b)=>b.score-a.score);
-      } catch {}
-    }
-
-    function suggestCosts(label){
-      const out = [];
-      const push = (lbl, amt, why) => out.push({ label: lbl, amount: amt, rationale: why, source: 'risk_map' });
-      if (label.startsWith('Engine')) { push('Engine air filter', 45, 'Engine bucket'); push('Oil change', 60, 'Engine bucket'); }
-      else if (label === 'Transmission') { push('Transmission service', 250, 'Trans bucket'); }
-      else if (label === 'Brakes') { push('Brakes (pads/rotors est.)', 450, 'Brakes bucket'); }
-      else if (label === 'Electrical') { push('Battery', 180, 'Electrical bucket'); }
-      else if (label === 'Steering') { push('Wheel alignment', 110, 'Steering bucket'); }
-      else if (label === 'Suspension') { push('Suspension inspection', 120, 'Suspension bucket'); }
-      else if (label === 'HVAC / A/C') { push('A/C service', 150, 'HVAC bucket'); }
-      return out;
-    }
-    const recommendations = scored.flatMap(s => suggestCosts(s.label));
-
-    res.json({
-      ok:true,
-      vehicle: { year, make, model },
-      counts: { recalls: recalls.length, complaints: complaints.length, tsbs: tsbs.length },
-      topRisks: scored,
-      recommendations,
-      source: 'nhtsa+tsb (+web if configured)'
-    });
-  } catch (e) {
-    console.error('evidence score error', e);
-    res.status(500).json({ ok:false, error:'evidence_failed' });
-  }
+    const items = j?.findItemsAdvancedResponse?.[0]?.searchResult?.[0]?.item || [];
+    const cleaned = items.map(it=>{
+      const title = it.title?.[0] || '';
+      const price = parseFloat(it.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || '0');
+      const url = it.viewItemURL?.[0] || null;
+      return { title, price, url };
+    }).filter(it=> it.price>0 && titleMatches(it.title,{year,make,model,trim}));
+    const stats = computeStats(cleaned.map(x=>x.price));
+    res.json({ ok:true, stats, items: cleaned });
+  } catch(e){ res.status(500).json({ ok:false, error:'ebay_failed' }); }
 });
 
-// ---------- Customer PDF ----------
+// ---------- Customer PDF (clean layout) ----------
 app.post('/api/report/customer', (req, res) => {
-  const { vin, vehicle='', valuation={}, adjustedWholesale=null, deduction=0, gapItems=[], carfaxSummary={}, carfaxUrl='', mileage=0, additionalCosts=[], evidence=null } = req.body || {};
+  const { vin, vehicle='', valuation={}, calc={}, items={}, carfaxUrl='' } = req.body || {};
   const filePath = path.join(reportsDir, `${vin || 'customer'}_${Date.now()}.pdf`);
   const doc = new PDFDocument({ margin: 40, size: 'LETTER' });
   const stream = fs.createWriteStream(filePath);
   doc.pipe(stream);
-
-  const brand = 'Used Car Project';
-  const cPrimary = '#2563EB';
-  const cGreen   = '#10B981';
-  const cAmber   = '#F59E0B';
-  const cIndigo  = '#6366F1';
-  const cText    = '#0F172A';
-  const cMuted   = '#475569';
-  const cRule    = '#E2E8F0';
-
-  doc.rect(40, 40, 532, 46).fill(cPrimary);
-  doc.fillColor('#FFFFFF').fontSize(16).text('Vehicle Appraisal (Customer Copy)', 50, 52, { width: 400 });
-  doc.fontSize(10).text(new Date().toLocaleString(), 50, 72);
-  doc.fillColor('#FFFFFF').fontSize(10).text(brand, 522, 52, { width: 40, align: 'right' });
+  const cPrimary='#2563EB', cText='#0F172A', cMuted='#475569', cRule='#E2E8F0', cGreen='#10B981', cAmber='#F59E0B', cIndigo='#6366F1';
+  // Header
+  doc.rect(40,40,532,46).fill(cPrimary);
+  doc.fillColor('#fff').fontSize(16).text('Vehicle Appraisal (Customer Copy)',50,52,{width:400});
+  doc.fontSize(10).text(new Date().toLocaleString(),50,72);
   doc.fillColor(cText);
-
-  const bannerY = 100;
-  doc.roundedRect(40, bannerY, 532, 68, 8).strokeColor(cRule).lineWidth(1).stroke();
-  doc.fillColor(cText).fontSize(14).text(vehicle || 'Vehicle', 50, bannerY + 12, { width: 400 });
-  doc.fillColor(cMuted).fontSize(10).text(`VIN: ${vin || '—'}`, 50, bannerY + 36, { width: 260 });
-  if (mileage) doc.text(`Mileage: ${Number(mileage||0).toLocaleString()} mi`, 310, bannerY + 36, { width: 262, align: 'right' });
-  doc.fillColor(cText);
-
-  let y = bannerY + 84;
-  const colW = 260;
-  function card(x, y, w, h, title, accent) {
-    doc.roundedRect(x, y, w, h, 10).fillAndStroke(accent, cRule);
-    doc.fillColor('#FFFFFF').fontSize(11).text(title, x + 12, y + 10);
-    doc.fillColor(cText);
-    doc.roundedRect(x, y + 28, w, h - 28, 10).fill('#FFFFFF').strokeColor(cRule).stroke();
-  }
-
-  const wWholesale = valuation?.wholesale != null ? `$${Number(valuation.wholesale).toLocaleString()}` : '—';
-  const wRetail = valuation?.retail != null ? `$${Number(valuation.retail).toLocaleString()}` : '—';
-  const adj = (adjustedWholesale != null) ? `$${Number(adjustedWholesale).toLocaleString()}` : '—';
-  const ded = deduction ? `$${Number(deduction).toLocaleString()}` : '$0';
-
-  card(40, y, colW, 170, 'Valuation', cGreen);
-  const LX = 54, LW = colW - 28;
-  function line(k, v){ doc.font('Helvetica-Bold').text(k, LX, doc.y + 6, { continued: true, width: LW/2 }); doc.font('Helvetica').text(v, LX + LW/2, doc.y - 14, { align: 'right', width: LW/2 }); }
-  doc.moveDown(1.2);
-  line('Retail', wRetail);
-  line('Wholesale', wWholesale);
-  line('Maint. deduction', `-${ded}`);
-  line('Wholesale (after gaps)', adj);
-
-  const reconTotal = (Array.isArray(additionalCosts) ? additionalCosts.reduce((s,it)=>s+Number(it.amount||0),0) : 0);
-  const targetBuy = (adjustedWholesale != null) ? Math.max(0, Number(adjustedWholesale) - reconTotal) : null;
-  card(312, y, colW, 170, 'Reconditioning Costs', cIndigo);
-  doc.text(' ', 312, y + 34);
-  function rline(k, v){ doc.font('Helvetica-Bold').text(k, 326, doc.y + 6, { continued: true, width: LW/2 }); doc.font('Helvetica').text(v, 326 + LW/2, doc.y - 14, { align: 'right', width: LW/2 }); }
-  rline('Reconditioning total', `$${reconTotal.toLocaleString()}`);
-  rline('Target purchase price', targetBuy != null ? `$${Number(targetBuy).toLocaleString()}` : '—');
-
-  y += 190;
-
-  const tableH = 160;
-  card(40, y, 532, tableH, 'Maintenance Deductions (Reasonable Estimates)', cAmber);
-  doc.text(' ', 40, y + 34);
-  const headerY = doc.y;
-  doc.fontSize(10).fillColor(cMuted).text('Item', 54, headerY, { width: 200 });
-  doc.text('Amount', 340, headerY, { width: 80, align: 'right' });
-  doc.text('Why', 430, headerY, { width: 130 });
-  doc.moveTo(50, headerY + 14).lineTo(560, headerY + 14).strokeColor(cRule).lineWidth(1).stroke();
-  doc.fillColor(cText);
-  let rowY = headerY + 18;
-  const rows = Array.isArray(gapItems) ? gapItems : [];
-  if (rows.length === 0) {
-    doc.text('No deductions applied.', 54, rowY);
-  } else {
-    rows.forEach((it, i) => {
-      const bg = (i % 2 === 0) ? '#F8FAFC' : '#FFFFFF';
-      doc.rect(44, rowY - 4, 520, 18).fill(bg);
-      doc.fillColor(cText).text(it.label || '', 54, rowY, { width: 200 });
-      doc.text(`$${Number(it.amount||0).toLocaleString()}`, 340, rowY, { width: 80, align:'right' });
-      const why = Array.isArray(it.rationale) ? it.rationale.join(' • ') : (it.rationale || '');
-      doc.fillColor(cMuted).text(why, 430, rowY, { width: 130 });
-      rowY += 20;
-    });
-  }
-  doc.fillColor(cText);
-  doc.moveTo(50, rowY + 4).lineTo(560, rowY + 4).strokeColor(cRule).stroke();
-  doc.font('Helvetica-Bold').text('Total deduction', 54, rowY + 8, { width: 200 });
-  doc.font('Helvetica').text(ded, 340, rowY + 8, { width: 80, align:'right' });
-
-  if (evidence) {
-    let y2 = rowY + 38;
-    if (y2 < 540) y2 = 540;
-    card(40, y2, 532, 130, 'Evidence Summary', cPrimary);
-    doc.text(' ', 40, y2 + 34);
-    const yy = doc.y;
-    doc.fontSize(10).fillColor(cText).text(`NHTSA Recalls: ${evidence.counts?.recalls ?? 0}`, 54, yy);
-    doc.text(`Complaints: ${evidence.counts?.complaints ?? 0}`, 200, yy);
-    doc.text(`TSBs: ${evidence.counts?.tsbs ?? 0}`, 340, yy);
-    doc.moveTo(50, yy + 14).lineTo(560, yy + 14).strokeColor(cRule).lineWidth(1).stroke();
-    const risks = Array.isArray(evidence.topRisks) ? evidence.topRisks.slice(0,4) : [];
-    let ry = yy + 20;
-    risks.forEach(r => { 
-      doc.text(`• ${r.label} — score ${r.score} (${r.rationale})`, 54, ry, { width: 500 }); ry += 14; 
-      if (Array.isArray(r.checks)) { 
-        r.checks.slice(0,2).forEach(c => { doc.fontSize(9).fillColor(cMuted).text(`   - ${c}`, 54, ry, { width: 500 }); ry += 12; });
-        doc.fontSize(10).fillColor(cText);
-      }
-    });
-  }
-
+  // Vehicle banner dynamic
+  const bannerY=100; const vehStr=vehicle||'Vehicle'; doc.fontSize(14);
+  const vehH=Math.max(18, doc.heightOfString(vehStr,{width:480})); const bannerH=Math.max(68,32+vehH);
+  doc.roundedRect(40,bannerY,532,bannerH,8).strokeColor(cRule).lineWidth(1).stroke();
+  doc.fillColor(cText).fontSize(14).text(vehStr,50,bannerY+12,{width:480});
+  let y=bannerY+bannerH+16; const colW=260;
+  function card(x,y,w,h,title,accent){ doc.roundedRect(x,y,w,h,10).fillAndStroke(accent,cRule); doc.fillColor('#fff').fontSize(11).text(title,x+12,y+10); doc.fillColor(cText); doc.roundedRect(x,y+28,w,h-28,10).fill('#fff').strokeColor(cRule).stroke(); return { cx:x+12, cy:y+42, cw:w-24 }; }
+  const val=card(40,y,colW,170,'Valuation',cGreen); let vy=val.cy,half=Math.floor(val.cw/2);
+  const vline=(k,v)=>{ doc.font('Helvetica-Bold').text(k,val.cx,vy,{width:half}); doc.font('Helvetica').text(v,val.cx+half,vy,{width:half,align:'right'}); vy+=16; };
+  vline('Retail', money(valuation.retail)); vline('Wholesale', money(valuation.wholesale)); vline('Maint. deduction','-'+money(calc.maintDeduction||0)); vline('Wholesale (after gaps)', money(calc.adjWholesale||0));
+  const rec=card(312,y,colW,170,'Offer Summary',cIndigo); let ry=rec.cy;
+  const rline=(k,v)=>{ doc.font('Helvetica-Bold').text(k,rec.cx,ry,{width:half}); doc.font('Helvetica').text(v,rec.cx+half,ry,{width:half,align:'right'}); ry+=16; };
+  rline('Recon total', money(calc.reconTotal||0)); rline('Risk reserve', money(calc.riskReserve||0)); rline('Holding & fees', money((calc.holding||0)+(calc.fees||0))); rline('Target Max Buy', money(calc.targetMaxBuy||0));
+  y+=190;
+  const tbl=card(40,y,532,160,'Maintenance Deductions',cAmber); const headerY=tbl.cy-8;
+  doc.fontSize(10).fillColor(cMuted).text('Item',54,headerY,{width:200}); doc.text('Amount',340,headerY,{width:80,align:'right'}); doc.text('Why',430,headerY,{width:130});
+  doc.moveTo(50,headerY+14).lineTo(560,headerY+14).strokeColor(cRule).stroke(); doc.fillColor(cText);
+  let rowY=headerY+18; const rows=Array.isArray(items?.maintenance)?items.maintenance:[];
+  if(!rows.length){ doc.text('No maintenance deductions applied.',54,rowY); }
+  else { rows.forEach((it,i)=>{ const why=Array.isArray(it.rationale)?it.rationale.join(' • '):(it.rationale||''); const whyH=Math.max(14, doc.heightOfString(why,{width:130})); const rowH=Math.max(18, whyH)+4; const bg=(i%2===0)?'#F8FAFC':'#FFFFFF'; doc.rect(44,rowY-4,520,rowH).fill(bg); doc.fillColor(cText).text(it.label||'',54,rowY,{width:200}); doc.text(money(it.amount||0),340,rowY,{width:80,align:'right'}); doc.fillColor(cMuted).text(why,430,rowY,{width:130}); doc.fillColor(cText); rowY+=rowH; }); }
+  // Footer
   doc.fillColor(cMuted).fontSize(9);
   if (carfaxUrl) doc.text(`Carfax: ${carfaxUrl}`, 40, 740, { link: carfaxUrl, underline: true });
-  doc.text('Estimates are for guidance only and not an official offer. Values depend on inspection/condition.', 40, 752);
-
+  doc.text('Estimates are guidance, not an offer. Final price depends on inspection and market.', 40, 752);
   doc.end();
-  stream.on('finish', () => res.json({ ok:true, url:`/reports/${path.basename(filePath)}` }));
+  stream.on('finish', ()=>res.json({ ok:true, url:`/reports/${path.basename(filePath)}` }));
 });
 
-app.get('/healthz', (_, res) => res.json({ ok:true }));
-
-app.listen(PORT, () => console.log(`Server running at http://0.0.0.0:${PORT}`));
+// ---------- Health ----------
+app.get('/healthz', (_,res)=>res.json({ ok:true }));
+app.listen(PORT, ()=>console.log('Server :'+PORT));
