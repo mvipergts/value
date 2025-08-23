@@ -25,7 +25,7 @@ app.use('/reports', express.static(reportsDir));
 const settingsFile = path.join(dataDir, 'settings.json');
 if (!fs.existsSync(settingsFile)) {
   fs.writeFileSync(settingsFile, JSON.stringify({
-    laborRate: 120, partsMultiplier: 1.0, desiredProfit: 1500, daysToTurn: 30,
+    laborRate: 120, partsMultiplier: 1.0, desiredProfit: 2000, daysToTurn: 30,
     floorplanAPR: 0.10, avgTransport: 150, marketingFees: 85, warrantyReserve: 0,
     riskWeights: {
       "Engine / Oil consumption": 100, "Transmission": 120, "Electrical": 60, "Brakes": 50, "HVAC / A/C": 40,
@@ -223,10 +223,10 @@ app.post('/api/offer/calc', (req,res)=>{
     const adjWholesale=Math.max(0, Math.round(wholesaleBase - maintDeduction));
     const holding=(S.floorplanAPR||0)*(S.daysToTurn||0)*(retailBase||0)/365;
     const fees=(S.avgTransport||0)+(S.marketingFees||0)+(S.warrantyReserve||0);
-    const ceiling1 = adjWholesale - reconTotal - riskReserve;
+    const ceiling1 = adjWholesale - reconTotal - riskReserve - (S.desiredProfit||0);
     const ceiling2 = (retailBase||0) - (S.desiredProfit||0) - reconTotal - holding - fees;
     const targetMaxBuy = Math.floor(Math.max(0, Math.min(ceiling1, ceiling2)));
-    res.json({ ok:true, numbers:{ retailBase, wholesaleBase, maintDeduction, adjWholesale, reconTotal, riskReserve, holding:Math.round(holding), fees:Math.round(fees), targetMaxBuy }, items:{ maintenance: dedupMaint, recon: dedupRecon } });
+    res.json({ ok:true, numbers:{ retailBase, wholesaleBase, maintDeduction, adjWholesale, reconTotal, riskReserve, desiredProfit:(S.desiredProfit||0), holding:Math.round(holding), fees:Math.round(fees), targetMaxBuy }, items:{ maintenance: dedupMaint, recon: dedupRecon } });
   } catch(e){ res.status(500).json({ ok:false, error:'offer_calc_failed' }); }
 });
 

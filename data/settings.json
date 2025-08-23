@@ -1,7 +1,7 @@
 {
   "laborRate": 120,
   "partsMultiplier": 1.0,
-  "desiredProfit": 1500,
+  "desiredProfit": 2000,
   "daysToTurn": 30,
   "floorplanAPR": 0.1,
   "avgTransport": 150,

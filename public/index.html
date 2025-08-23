@@ -14,6 +14,15 @@ h1{ margin:0 0 8px 0; }
 small.muted{ color:var(--muted); }
 .card{ border:1px solid var(--border); background:linear-gradient(180deg, var(--card), var(--surface)); border-radius:16px; padding:16px; margin-top:14px; }
 .grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+.grid.grid-3{ grid-template-columns:minmax(0,1.15fr) minmax(0,1.15fr) minmax(0,0.9fr); align-items:start; }
+@media (max-width: 1100px){ .grid.grid-3{ grid-template-columns:1fr; } }
+.card.risks{ max-height:560px; overflow:auto; }
+.card.risks, .card.risks *{ word-break:break-word; overflow-wrap:anywhere; }
+.card.risks details{ border:1px dashed var(--accent); border-radius:10px; padding:6px 8px; margin:6px 0; background:#fff; }
+.card.risks summary{ cursor:pointer; list-style:none; font-weight:700; }
+.card.risks .risk-body{ padding:6px 2px 8px; font-size:14px; }
+.card.risks .risk-stats{ color:var(--muted); margin-top:2px; font-size:13px; }
+.card.risks .risk-checks{ margin-top:6px; }
 input, button, textarea, select{ padding:12px 14px; border-radius:12px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:15px; }
 .btn{ background:var(--primary); color:#fff; border:1px solid var(--primary); border-radius:12px; padding:12px 18px; font-weight:800; box-shadow:0 6px 18px rgba(37,99,235,.22); cursor:pointer; }
 .btn.ghost{ background:#fff; color:var(--primary); }
@@ -113,7 +122,7 @@ tfoot td{ padding:8px; }
 
   <div id="step3" class="card hidden">
     <h3>Service & Recon</h3>
-    <div class="grid">
+    <div class="grid grid-3">
       <div class="card">
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
           <button class="btn" onclick="applyMaintenance()">Apply Maintenance (from Carfax)</button>
@@ -147,7 +156,7 @@ tfoot td{ padding:8px; }
           <tfoot><tr><td style="text-align:right"><strong>Total</strong></td><td style="text-align:right" id="reconTotal">$0</td><td></td></tr></tfoot>
         </table>
       </div>
-      <div class="card">
+      <div class="card risks">
         <h4>Top Risks</h4>
         <div id="riskBadge" class="badge">Recalls 0 • Complaints 0 • TSBs 0</div>
         <ul id="riskList"></ul>
@@ -167,6 +176,7 @@ tfoot td{ padding:8px; }
         <div class="stat"><span><strong>Wholesale (after)</strong></span><span id="oAdj">$0</span></div>
         <div class="stat"><span><strong>Recon total</strong></span><span id="oRecon">$0</span></div>
         <div class="stat"><span><strong>Risk reserve</strong></span><span id="oRisk">$0</span></div>
+        <div class="stat"><span><strong>Desired profit</strong></span><span id="oProfit">$0</span></div>
         <div class="stat"><span><strong>Holding & fees</strong></span><span id="oHold">$0</span></div>
         <div class="stat"><span><strong>Target Max Buy</strong></span><span id="oMax" style="font-weight:800">$0</span></div>
       </div>
@@ -389,7 +399,31 @@ async function getEvidence(){
   if (!res || !res.ok) { alert('Evidence fetch failed'); return; }
   evidence = res;
   document.getElementById('riskBadge').textContent = `Recalls ${res.counts.recalls} • Complaints ${res.counts.complaints} • TSBs ${res.counts.tsbs}`;
-  document.getElementById('riskList').innerHTML = (res.topRisks||[]).map(r=>`<li><strong>${r.label}</strong> — score ${r.score} <span class="muted">(${r.rationale})</span></li>`).join('') || '<li class="muted">No notable risks.</li>';
+  const defaults = {
+      'Engine / Oil consumption': [
+        'Check for excessive oil use (qt/1k mi), blue smoke, fouled plugs',
+        'Scan for misfire codes; PCV/valve cover leaks'
+      ],
+      'Transmission': [
+        'Test drive: 2–3 shift flare/judder/harshness',
+        'If CVT: low-speed judder/whine; verify fluid service history'
+      ],
+      'Electrical': ['Battery/alternator load test; parasitic draw check'],
+      'Brakes': ['Measure pad/rotor thickness; brake pulsation test'],
+      'HVAC / A/C': ['Vent temp at idle/cruise; blend door operation; compressor noise']
+    };
+    const list = (res.topRisks||[]).map(r=>{
+      const checks = (r.checks && r.checks.length ? r.checks : (defaults[r.label]||[]))
+        .map(c=>`<li>${c}</li>`).join('');
+      return `<details class="risk"><summary><strong>${r.label}</strong> — score ${r.score}</summary>
+        <div class="risk-body">
+          <div class="risk-stats">Complaints: ${r.complaints||0} • Recall: ${r.recall?'yes':'no'} • TSB: ${r.tsb?'yes':'no'}</div>
+          <div class="muted">${r.rationale||''}</div>
+          <ul class="risk-checks">${checks}</ul>
+        </div>
+      </details>`;
+    }).join('');
+    document.getElementById('riskList').innerHTML = list || '<div class="muted">No notable risks.</div>';
   refreshOffer();
 }
 function applyRisksToRecon(){
@@ -420,7 +454,7 @@ async function refreshOffer(){
   maintItems = res.items.maintenance; reconItems = res.items.recon;
   renderMaint(); renderRecon();
   setText('sRetail', fmt(calc.retailBase)); setText('sWhole', fmt(calc.wholesaleBase)); setText('sMaint', '-'+fmt(calc.maintDeduction)); setText('sRecon', fmt(calc.reconTotal)); setText('sRisk', fmt(calc.riskReserve)); setText('sMax', fmt(calc.targetMaxBuy));
-  setText('oRetail', fmt(calc.retailBase)); setText('oWhole', fmt(calc.wholesaleBase)); setText('oMaint', '-'+fmt(calc.maintDeduction)); setText('oAdj', fmt(calc.adjWholesale)); setText('oRecon', fmt(calc.reconTotal)); setText('oRisk', fmt(calc.riskReserve)); setText('oHold', fmt((calc.holding||0)+(calc.fees||0))); setText('oMax', fmt(calc.targetMaxBuy));
+  setText('oRetail', fmt(calc.retailBase)); setText('oWhole', fmt(calc.wholesaleBase)); setText('oMaint', '-'+fmt(calc.maintDeduction)); setText('oAdj', fmt(calc.adjWholesale)); setText('oRecon', fmt(calc.reconTotal)); setText('oRisk', fmt(calc.riskReserve)); setText('oProfit', fmt(calc.desiredProfit||0)); setText('oHold', fmt((calc.holding||0)+(calc.fees||0))); setText('oMax', fmt(calc.targetMaxBuy));
   document.getElementById('proofCarfax').textContent = JSON.stringify(carfaxSummary||{},null,2);
   renderCarfaxPretty(carfaxSummary||{});
   document.getElementById('proofEvidence').textContent = JSON.stringify(evidence||{},null,2);
