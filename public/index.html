@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Car Value, History & Maintenance — Pro v6.2</title>
+<title>Car Value, History & Maintenance — Pro v6.2.2</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{ --bg:#f7fafc; --surface:#fff; --card:#fff; --text:#0f172a; --muted:#475569; --primary:#2563eb; --border:#d6e0ee; --accent:#e2e8f0; --green:#10b981; --amber:#f59e0b; --indigo:#6366f1; }
@@ -27,22 +27,22 @@ thead th{ text-align:left; background:rgba(2,6,23,.03); padding:8px; }
 tbody td{ padding:8px; border-bottom:1px dashed var(--accent); }
 tfoot td{ padding:8px; }
 
-/* Sticky summary bar */
 #sticky{ position:sticky; top:0; z-index:5; background: rgba(255,255,255,.86); backdrop-filter: blur(6px); border-bottom:1px solid var(--border); }
 #sticky .wrap{ max-width:1100px; margin:0 auto; padding:10px 24px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
 .pill{ border:1px solid var(--border); background:#fff; padding:8px 12px; border-radius:999px; font-weight:700; }
 .pill.blue{ border-color:rgba(37,99,235,.35); background:rgba(37,99,235,.08); }
 
-/* Wizard nav */
 #wizardNav{ display:flex; gap:8px; margin-top:8px; }
 .step{ padding:8px 14px; border-radius:12px; border:1px solid var(--border); }
 .step.active{ background:rgba(37,99,235,.1); border-color:var(--primary); }
 
-/* Modal */
 .modal{ position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; }
 .modal .panel{ width:720px; max-width:94vw; background:#fff; border-radius:14px; padding:18px; }
 .modal .grid{ grid-template-columns: repeat(2, minmax(0,1fr)); }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script>if (window.pdfjsLib) { pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js"; }</script>
+<script src="https://unpkg.com/tesseract.js@2.1.5/dist/tesseract.min.js"></script>
 </head>
 <body>
 <div id="sticky">
@@ -60,7 +60,7 @@ tfoot td{ padding:8px; }
 </div>
 
 <div class="container">
-  <h1>Car Value, History & Maintenance — Pro v6.2</h1>
+  <h1>Car Value, History & Maintenance — Pro v6.2.2</h1>
   <div id="wizardNav">
     <div class="step active" id="step1Btn" onclick="showStep(1)">1) Identify</div>
     <div class="step" id="step2Btn" onclick="showStep(2)">2) History</div>
@@ -68,7 +68,6 @@ tfoot td{ padding:8px; }
     <div class="step" id="step4Btn" onclick="showStep(4)">4) Offer + Comps</div>
   </div>
 
-  <!-- Step 1 -->
   <div id="step1" class="card">
     <h3>Identify</h3>
     <div style="display:flex; gap:10px; flex-wrap:wrap">
@@ -94,7 +93,6 @@ tfoot td{ padding:8px; }
     </div>
   </div>
 
-  <!-- Step 2 -->
   <div id="step2" class="card hidden">
     <h3>History</h3>
     <div class="card">
@@ -102,6 +100,7 @@ tfoot td{ padding:8px; }
       <div style="display:flex; gap:10px; align-items:center">
         <input type="file" id="carfax" accept="application/pdf">
         <button class="btn" onclick="uploadCarfax()">Upload</button>
+        <button class="btn ghost" onclick="ocrCarfaxFromFile()">Scan with OCR</button>
       </div>
       <div id="carfaxUrl" class="muted"></div>
       <div id="carfaxBox" class="card"></div>
@@ -112,7 +111,6 @@ tfoot td{ padding:8px; }
     </div>
   </div>
 
-  <!-- Step 3 -->
   <div id="step3" class="card hidden">
     <h3>Service & Recon</h3>
     <div class="grid">
@@ -158,7 +156,6 @@ tfoot td{ padding:8px; }
     </div>
   </div>
 
-  <!-- Step 4 -->
   <div id="step4" class="card hidden">
     <h3>Offer + Market Comps</h3>
     <div class="grid">
@@ -200,7 +197,6 @@ tfoot td{ padding:8px; }
   </div>
 </div>
 
-<!-- Settings modal -->
 <div id="settingsModal" class="modal">
   <div class="panel">
     <div style="display:flex; justify-content:space-between; align-items:center">
@@ -283,23 +279,62 @@ async function uploadCarfax(){
   document.getElementById('carfaxUrl').innerHTML = `Uploaded: <a href="${carfaxUrl}" target="_blank">${carfaxUrl}</a>`;
   document.getElementById('carfaxBox').innerHTML = carfaxSummary && !carfaxSummary.note
       ? Object.entries(carfaxSummary).map(([k,v])=>`<div class="stat"><span><strong>${k}</strong></span><span>${Array.isArray(v)?v.join(', '):v}</span></div>`).join('')
-      : '<span class="muted">No text extracted. Paste text below.</span>';
+      : '<span class="muted">No text extracted. Try OCR scan.</span>';
+  // Auto-advance to Step 3
+  showStep(3);
   refreshOffer();
 }
+
 async function summarizeText(){
   const raw = document.getElementById('carfaxPaste').value||'';
   if (!raw.trim()) return alert('Paste the text first');
   const res = await fetch('/api/carfax/summarize-text',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rawText: raw })}).then(r=>r.json());
-  if (res.ok){ carfaxSummary = res.summary; document.getElementById('carfaxBox').innerHTML = Object.entries(carfaxSummary).map(([k,v])=>`<div class="stat"><span><strong>${k}</strong></span><span>${Array.isArray(v)?v.join(', '):v}</span></div>`).join(''); refreshOffer(); }
+  if (res.ok){ carfaxSummary = res.summary; document.getElementById('carfaxBox').innerHTML = Object.entries(carfaxSummary).map(([k,v])=>`<div class="stat"><span><strong>${k}</strong></span><span>${Array.isArray(v)?v.join(', '):v}</span></div>`).join(''); refreshOffer(); showStep(3); }
 }
 
+// OCR
+async function ocrCarfaxFromFile(){
+  const f = document.getElementById('carfax').files[0];
+  if (!f) { alert('Pick a PDF first'); return; }
+  const ab = await f.arrayBuffer();
+  return ocrCarfaxFromArrayBuffer(ab);
+}
+async function ocrCarfaxFromArrayBuffer(arrayBuffer){
+  if (!window.pdfjsLib || !window.Tesseract){ alert('OCR libraries not loaded'); return; }
+  try{
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let fullText = '';
+    const maxPages = Math.min(pdf.numPages, 10);
+    for (let p=1; p<=maxPages; p++){
+      const page = await pdf.getPage(p);
+      const viewport = page.getViewport({ scale: 1.6 });
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      const { data } = await Tesseract.recognize(canvas, 'eng');
+      fullText += '\\n\\n' + (data && data.text ? data.text : '');
+    }
+    if (fullText.trim().length < 30){ alert('OCR found little text. Try higher quality.'); return; }
+    carfaxText = fullText;
+    const res = await fetch('/api/carfax/summarize-text', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rawText: fullText }) }).then(r=>r.json());
+    if (res && res.ok){
+      carfaxSummary = res.summary;
+      document.getElementById('carfaxBox').innerHTML = Object.entries(carfaxSummary).map(([k,v])=>`<div class="stat"><span><strong>${k}</strong></span><span>${Array.isArray(v)?v.join(', '):v}</span></div>`).join('');
+      await applyMaintenance();
+      showStep(3);
+      refreshOffer();
+    } else { alert('OCR summarize failed'); }
+  }catch(err){ console.error(err); alert('OCR failed: '+(err?.message||err)); }
+}
+
+// Maintenance & Recon
 async function applyMaintenance(){
   const year = decoded.year || 0;
   const mileage = Number(document.getElementById('miles').value||0);
   const body = { summary: carfaxSummary||{}, text: carfaxText||'', mileage, year };
   const res = await fetch('/api/infer/maintenance',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
   if (res && res.ok){
-    // Merge with existing, dedup by key
     const seen = new Set(maintItems.map(x=>x.key||x.label));
     res.items.forEach(it=>{ const k=it.key||it.label; if(!seen.has(k)){ seen.add(k); maintItems.push(it); } });
     renderMaint(); refreshOffer();
@@ -336,7 +371,7 @@ async function getEvidence(){
   if (!res || !res.ok) { alert('Evidence fetch failed'); return; }
   evidence = res;
   document.getElementById('riskBadge').textContent = `Recalls ${res.counts.recalls} • Complaints ${res.counts.complaints} • TSBs ${res.counts.tsbs}`;
-  document.getElementById('riskList').innerHTML = (res.topRisks||[]).map(r=>`<li><strong>${r.label}</strong> — score ${r.score} <span class="muted">(${r.rationale})</span>${(Array.isArray(r.checks)&&r.checks.length)?('<ul>'+r.checks.map(c=>`<li class="muted">${c}</li>`).join('')+'</ul>'):''}</li>`).join('') || '<li class="muted">No notable risks.</li>';
+  document.getElementById('riskList').innerHTML = (res.topRisks||[]).map(r=>`<li><strong>${r.label}</strong> — score ${r.score} <span class="muted">(${r.rationale})</span></li>`).join('') || '<li class="muted">No notable risks.</li>';
   refreshOffer();
 }
 function applyRisksToRecon(){
@@ -357,6 +392,7 @@ function applyRisksToRecon(){
   if (!added) alert('No new recon items (already applied).');
 }
 
+// Offer refresh
 async function refreshOffer(){
   const payload = { valuation, maintenanceItems: maintItems, reconItems, risks: evidence? (evidence.topRisks||[]) : [] };
   payload.baseWholesale = valuation?.wholesale ?? null;
@@ -365,24 +401,13 @@ async function refreshOffer(){
   calc = res.numbers;
   maintItems = res.items.maintenance; reconItems = res.items.recon;
   renderMaint(); renderRecon();
-  // Sticky
   setText('sRetail', fmt(calc.retailBase)); setText('sWhole', fmt(calc.wholesaleBase)); setText('sMaint', '-'+fmt(calc.maintDeduction)); setText('sRecon', fmt(calc.reconTotal)); setText('sRisk', fmt(calc.riskReserve)); setText('sMax', fmt(calc.targetMaxBuy));
-  // Offer card
   setText('oRetail', fmt(calc.retailBase)); setText('oWhole', fmt(calc.wholesaleBase)); setText('oMaint', '-'+fmt(calc.maintDeduction)); setText('oAdj', fmt(calc.adjWholesale)); setText('oRecon', fmt(calc.reconTotal)); setText('oRisk', fmt(calc.riskReserve)); setText('oHold', fmt((calc.holding||0)+(calc.fees||0))); setText('oMax', fmt(calc.targetMaxBuy));
-  // Proof panels
   document.getElementById('proofCarfax').textContent = JSON.stringify(carfaxSummary||{},null,2);
   document.getElementById('proofEvidence').textContent = JSON.stringify(evidence||{},null,2);
 }
 
-async function printPdf(){
-  if (!valuation || !calc) { alert('Run through the steps first.'); return; }
-  const vin = document.getElementById('vin').value.trim();
-  const body = { vin, vehicle: document.getElementById('vehicleBanner').innerText.trim(), valuation, calc, items: { maintenance: maintItems, recon: reconItems }, carfaxUrl };
-  const res = await fetch('/api/report/customer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
-  if (res && res.url) window.open(res.url, '_blank'); else alert('PDF failed');
-}
-
-/* Settings modal */
+// Settings modal
 function openSettings(){ loadSettings(); document.getElementById('settingsModal').style.display='flex'; }
 function closeSettings(){ document.getElementById('settingsModal').style.display='none'; }
 async function loadSettings(){
@@ -425,7 +450,7 @@ async function saveSettings(){
   if (res && res.ok) { closeSettings(); refreshOffer(); }
 }
 
-/* eBay comps */
+// eBay comps UI
 function getCompQuery(){ return { year: decoded.year||'', make: decoded.make||'', model: decoded.model||'', trim: decoded.trim||'', zip: document.getElementById('compZip').value.trim(), radius: document.getElementById('compRadius').value }; }
 async function fetchSold(){
   const q=getCompQuery(); const qs=new URLSearchParams(q).toString();

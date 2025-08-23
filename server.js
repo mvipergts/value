@@ -21,33 +21,31 @@ const dataDir = path.join(__dirname, 'data');
 app.use('/uploads', express.static(uploadDir));
 app.use('/reports', express.static(reportsDir));
 
-// ---------- SETTINGS ----------
+// SETTINGS
 const settingsFile = path.join(dataDir, 'settings.json');
 if (!fs.existsSync(settingsFile)) {
   fs.writeFileSync(settingsFile, JSON.stringify({
     laborRate: 120, partsMultiplier: 1.0, desiredProfit: 1500, daysToTurn: 30,
     floorplanAPR: 0.10, avgTransport: 150, marketingFees: 85, warrantyReserve: 0,
     riskWeights: {
-      "Engine / Oil consumption": 100,"Transmission": 120,"Electrical": 60,"Brakes": 50,"HVAC / A/C": 40,
-      "Airbags / SRS": 80,"Steering": 70,"Suspension": 70,"Fuel system": 70,"Paint / Exterior": 30
+      "Engine / Oil consumption": 100, "Transmission": 120, "Electrical": 60, "Brakes": 50, "HVAC / A/C": 40,
+      "Airbags / SRS": 80, "Steering": 70, "Suspension": 70, "Fuel system": 70, "Paint / Exterior": 30
     },
     riskReserveCapPct: 0.15, allowSerpAPI: false
   }, null, 2));
 }
 const readSettings = () => JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
 const writeSettings = (obj) => fs.writeFileSync(settingsFile, JSON.stringify(obj, null, 2));
+app.get('/api/settings', (req,res)=>{ try{ res.json({ ok:true, settings: readSettings() }); }catch(e){ res.status(500).json({ ok:false }); } });
+app.post('/api/settings', (req,res)=>{ try{ const s=readSettings(); const next={...s, ...(req.body||{})}; writeSettings(next); res.json({ ok:true, settings: next }); }catch(e){ res.status(500).json({ ok:false }); } });
 
-app.get('/api/settings', (req, res) => { try{ res.json({ ok:true, settings: readSettings() }); } catch(e){ res.status(500).json({ ok:false }); } });
-app.post('/api/settings', (req, res) => { try{ const cur=readSettings(); const next={...cur, ...(req.body||{})}; writeSettings(next); res.json({ ok:true, settings: next }); } catch(e){ res.status(500).json({ ok:false }); } });
-
-// ---------- Uploads ----------
+// Uploads
 const storage = multer.diskStorage({
   destination: (_, __, cb) => cb(null, uploadDir),
   filename: (_, file, cb) => cb(null, Date.now() + '_' + file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_'))
 });
 const upload = multer({ storage });
 
-// ---------- Helpers ----------
 function expectedMileageByYear(year) {
   const now = new Date().getFullYear();
   const age = (year && year > 1900 && year <= now) ? (now - year) : 0;
@@ -55,7 +53,7 @@ function expectedMileageByYear(year) {
 }
 function money(n){ return '$' + Number(n || 0).toLocaleString(); }
 
-// ---------- VIN ----------
+// VIN decode
 app.get('/api/vin/:vin', async (req, res) => {
   try {
     const vin = String(req.params.vin || '').trim();
@@ -67,7 +65,7 @@ app.get('/api/vin/:vin', async (req, res) => {
   } catch(e){ res.status(500).json({ ok:false, error:'vin_failed' }); }
 });
 
-// ---------- Values (heuristic) ----------
+// Heuristic values
 app.get('/api/value/:vin', async (req, res) => {
   try {
     const mileage = Number(req.query.mileage || 0);
@@ -82,11 +80,11 @@ app.get('/api/value/:vin', async (req, res) => {
   } catch(e){ res.json({ vin: req.params.vin, retail: 12000, wholesale: 10000, method:'fallback' }); }
 });
 
-// ---------- History & Maintenance (stubs) ----------
+// History & maintenance stubs
 app.get('/api/history/:vin', (req,res)=>res.json({ accidents:0, owners:2, serviceRecords:7 }));
 app.get('/api/maintenance/:vin', (req,res)=>res.json({ upcoming:['Oil change','Cabin filter'], intervals:{ 'Oil change':'5k mi' } }));
 
-// ---------- Carfax parse ----------
+// Carfax parse
 function extractCarfaxSummary(text){
   const t = (text || '').replace(/\r/g, '');
   const lower = t.toLowerCase();
@@ -119,7 +117,7 @@ app.post('/api/carfax/summarize-text', (req,res)=>{
   try{ const { rawText='' } = req.body||{}; if(!rawText.trim()) return res.status(400).json({ ok:false, error:'no_text' }); res.json({ ok:true, summary: extractCarfaxSummary(rawText) }); }catch(e){ res.status(500).json({ ok:false }); }
 });
 
-// ---------- Maintenance inference ----------
+// Maintenance inference
 const COST_MAP = {
   oil_change: 60, cabin_filter: 40, engine_air_filter: 45,
   tire_rotation: 30, wheel_alignment: 110, battery: 180,
@@ -141,18 +139,15 @@ function inferMaintenance({ summary={}, text='', mileage=0, year=0 }){
   return Array.from(map.values());
 }
 app.post('/api/infer/maintenance', (req,res)=>{
-  try {
-    const items = inferMaintenance(req.body||{});
-    res.json({ ok:true, items });
-  } catch(e){ res.status(500).json({ ok:false, error:'infer_failed' }); }
+  try{ res.json({ ok:true, items: inferMaintenance(req.body||{}) }); }catch(e){ res.status(500).json({ ok:false, error:'infer_failed' }); }
 });
 
-// ---------- Evidence (NHTSA + TSB) ----------
+// Evidence (NHTSA + TSB)
 app.post('/api/evidence/score', async (req,res)=>{
   try {
     const { vin='', vehicle='' } = req.body||{};
     let year=null, make=null, model=null;
-    if (vehicle){ const parts=vehicle.split(/\s+/); const y=parseInt(parts[0],10); if(!isNaN(y)){ year=y; make=parts[1]||null; model=parts[2]||null; } }
+    if (vehicle){ const parts=vehicle.split(/\s+/); const y=parseInt(parts[0],10); if(!isNaN(y)){ year=y; make=parts[1]||null; model=parts.slice(2).join(' ')||null; } }
     if ((!year||!make||!model) && vin){
       try{ const r=await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`); const j=await r.json(); const row=j?.Results?.[0]||{}; year=year||parseInt(row.ModelYear,10)||null; make=make||row.Make||null; model=model||row.Model||null; } catch {}
     }
@@ -170,22 +165,36 @@ app.post('/api/evidence/score', async (req,res)=>{
         const r=await fetch(url,{ headers: hdrs }); const data=await r.json(); if(Array.isArray(data)) tsbs=data;
       }catch{}
     }
+    // Score buckets
     const buckets=[
-      {key:'engine',label:'Engine / Oil consumption'},{key:'trans',label:'Transmission'},{key:'brake',label:'Brakes'},
-      {key:'air bag',label:'Airbags / SRS'},{key:'electr',label:'Electrical'},{key:'steering',label:'Steering'},
-      {key:'susp',label:'Suspension'},{key:'fuel',label:'Fuel system'},{key:'ac',label:'HVAC / A/C'},{key:'paint',label:'Paint / Exterior'}
+      {key:'engine',label:'Engine / Oil consumption'},
+      {key:'trans',label:'Transmission'},
+      {key:'brake',label:'Brakes'},
+      {key:'air bag',label:'Airbags / SRS'},
+      {key:'electr',label:'Electrical'},
+      {key:'steering',label:'Steering'},
+      {key:'susp',label:'Suspension'},
+      {key:'fuel',label:'Fuel system'},
+      {key:'ac',label:'HVAC / A/C'},
+      {key:'paint',label:'Paint / Exterior'}
     ];
     const lowerIncludes=(txt,n)=> (txt||'').toLowerCase().includes(n);
     const buckCounts=new Map(), buckTSB=new Map(), buckRecall=new Map();
     complaints.forEach(c=>{ const txt=`${c?.component||''} ${c?.summary||''} ${c?.narrative||''}`.toLowerCase(); buckets.forEach(b=>{ if(lowerIncludes(txt,b.key)) buckCounts.set(b.label,(buckCounts.get(b.label)||0)+1); }); });
     tsbs.forEach(t=>{ const txt=`${t?.component||''} ${t?.system_type||''} ${t?.summary||''}`.toLowerCase(); buckets.forEach(b=>{ if(lowerIncludes(txt,b.key)) buckTSB.set(b.label,true); }); });
     recalls.forEach(rc=>{ const txt=`${rc?.Component||''} ${rc?.Summary||''}`.toLowerCase(); buckets.forEach(b=>{ if(lowerIncludes(txt,b.key)) buckRecall.set(b.label,true); }); });
-    const scored=buckets.map(b=>{ const c=buckCounts.get(b.label)||0; const hasT=!!buckTSB.get(b.label), hasR=!!buckRecall.get(b.label); const score=(hasT?3:0)+(hasR?2:0)+Math.floor(c/10); const rationale=[hasT?'TSB present (+3)':null, hasR?'Recall mention (+2)':null, c?`${c} complaints (~+${Math.floor(c/10)})`:null].filter(Boolean).join(' · '); const checks=(()=>{ if (b.label.startsWith('Engine')) return ['Check oil consumption (qt/1k mi)','Scan for misfire codes']; if (b.label==='Transmission') return ['2→3 shift flare/judder','Fluid history']; if (b.label==='Electrical') return ['Battery/alt load test','Parasitic draw']; if (b.label==='Brakes') return ['Pad/rotor thickness','Fluid moisture %']; if (b.label==='HVAC / A/C') return ['Vent temp at idle & cruise','Compressor noise']; return []; })(); return { label:b.label, score, rationale, checks, complaints:c, tsb:hasT, recall:hasR }; }).filter(s=>s.score>0).sort((a,b)=>b.score-a.score).slice(0,5);
+    const scored=buckets.map(b=>{
+      const c=buckCounts.get(b.label)||0;
+      const hasT=!!buckTSB.get(b.label), hasR=!!buckRecall.get(b.label);
+      const score=(hasT?3:0)+(hasR?2:0)+Math.floor(c/10);
+      const rationale=[hasT?'TSB present (+3)':null, hasR?'Recall mention (+2)':null, c?`${c} complaints (~+${Math.floor(c/10)})`:null].filter(Boolean).join(' · ');
+      return { label:b.label, score, rationale, complaints:c, tsb:hasT, recall:hasR, checks:[] };
+    }).filter(s=>s.score>0).sort((a,b)=>b.score-a.score).slice(0,5);
     res.json({ ok:true, counts:{recalls:recalls.length, complaints:complaints.length, tsbs:tsbs.length}, topRisks:scored });
   } catch(e){ res.status(500).json({ ok:false, error:'evidence_failed' }); }
 });
 
-// ---------- Offer calc ----------
+// Offer calc
 app.post('/api/offer/calc', (req,res)=>{
   try {
     const S = readSettings();
@@ -209,7 +218,7 @@ app.post('/api/offer/calc', (req,res)=>{
   } catch(e){ res.status(500).json({ ok:false, error:'offer_calc_failed' }); }
 });
 
-// ---------- eBay comps (FREE Finding API) ----------
+// eBay comps
 const EBAY_APP_ID = process.env.EBAY_APP_ID || '';
 const EBAY_ENDPOINT = 'https://svcs.ebay.com/services/search/FindingService/v1';
 async function ebayFinding(operation, params){
@@ -293,7 +302,7 @@ app.get('/api/comps/ebay/active', async (req,res)=>{
   } catch(e){ res.status(500).json({ ok:false, error:'ebay_failed' }); }
 });
 
-// ---------- Customer PDF (clean layout) ----------
+// Customer PDF
 app.post('/api/report/customer', (req, res) => {
   const { vin, vehicle='', valuation={}, calc={}, items={}, carfaxUrl='' } = req.body || {};
   const filePath = path.join(reportsDir, `${vin || 'customer'}_${Date.now()}.pdf`);
@@ -301,32 +310,73 @@ app.post('/api/report/customer', (req, res) => {
   const stream = fs.createWriteStream(filePath);
   doc.pipe(stream);
   const cPrimary='#2563EB', cText='#0F172A', cMuted='#475569', cRule='#E2E8F0', cGreen='#10B981', cAmber='#F59E0B', cIndigo='#6366F1';
-  // Header
+
   doc.rect(40,40,532,46).fill(cPrimary);
   doc.fillColor('#fff').fontSize(16).text('Vehicle Appraisal (Customer Copy)',50,52,{width:400});
   doc.fontSize(10).text(new Date().toLocaleString(),50,72);
   doc.fillColor(cText);
-  // Vehicle banner dynamic
-  const bannerY=100; const vehStr=vehicle||'Vehicle'; doc.fontSize(14);
-  const vehH=Math.max(18, doc.heightOfString(vehStr,{width:480})); const bannerH=Math.max(68,32+vehH);
+
+  const bannerY=100;
+  const vehStr=vehicle||'Vehicle';
+  doc.fontSize(14);
+  const vehH=Math.max(18, doc.heightOfString(vehStr,{width:480}));
+  const bannerH=Math.max(68,32+vehH);
   doc.roundedRect(40,bannerY,532,bannerH,8).strokeColor(cRule).lineWidth(1).stroke();
   doc.fillColor(cText).fontSize(14).text(vehStr,50,bannerY+12,{width:480});
-  let y=bannerY+bannerH+16; const colW=260;
-  function card(x,y,w,h,title,accent){ doc.roundedRect(x,y,w,h,10).fillAndStroke(accent,cRule); doc.fillColor('#fff').fontSize(11).text(title,x+12,y+10); doc.fillColor(cText); doc.roundedRect(x,y+28,w,h-28,10).fill('#fff').strokeColor(cRule).stroke(); return { cx:x+12, cy:y+42, cw:w-24 }; }
-  const val=card(40,y,colW,170,'Valuation',cGreen); let vy=val.cy,half=Math.floor(val.cw/2);
-  const vline=(k,v)=>{ doc.font('Helvetica-Bold').text(k,val.cx,vy,{width:half}); doc.font('Helvetica').text(v,val.cx+half,vy,{width:half,align:'right'}); vy+=16; };
-  vline('Retail', money(valuation.retail)); vline('Wholesale', money(valuation.wholesale)); vline('Maint. deduction','-'+money(calc.maintDeduction||0)); vline('Wholesale (after gaps)', money(calc.adjWholesale||0));
-  const rec=card(312,y,colW,170,'Offer Summary',cIndigo); let ry=rec.cy;
-  const rline=(k,v)=>{ doc.font('Helvetica-Bold').text(k,rec.cx,ry,{width:half}); doc.font('Helvetica').text(v,rec.cx+half,ry,{width:half,align:'right'}); ry+=16; };
-  rline('Recon total', money(calc.reconTotal||0)); rline('Risk reserve', money(calc.riskReserve||0)); rline('Holding & fees', money((calc.holding||0)+(calc.fees||0))); rline('Target Max Buy', money(calc.targetMaxBuy||0));
+
+  let y=bannerY+bannerH+16; const colW=260; const half=110;
+
+  function card(x,y,w,h,title,accent){
+    doc.roundedRect(x,y,w,h,10).fillAndStroke(accent,cRule);
+    doc.fillColor('#fff').fontSize(11).text(title,x+12,y+10);
+    doc.fillColor(cText);
+    doc.roundedRect(x,y+28,w,h-28,10).fill('#fff').strokeColor(cRule).stroke();
+    return { cx:x+12, cy:y+42, cw:w-24 };
+  }
+
+  const v=card(40,y,colW,170,'Valuation',cGreen);
+  let vy=v.cy;
+  const kv=(k,vv)=>{ doc.font('Helvetica-Bold').text(k,v.cx,vy,{width:half}); doc.font('Helvetica').text(vv,v.cx+half,vy,{width:colW-24-half,align:'right'}); vy+=16; };
+  kv('Retail', money(valuation.retail||0));
+  kv('Wholesale', money(valuation.wholesale||0));
+  kv('Maint. deduction','-'+money(calc.maintDeduction||0));
+  kv('Wholesale (after gaps)', money(calc.adjWholesale||0));
+
+  const r=card(312,y,colW,170,'Offer Summary',cIndigo);
+  let ry=r.cy;
+  const kr=(k,vv)=>{ doc.font('Helvetica-Bold').text(k,r.cx,ry,{width:half}); doc.font('Helvetica').text(vv,r.cx+half,ry,{width:colW-24-half,align:'right'}); ry+=16; };
+  kr('Recon total', money(calc.reconTotal||0));
+  kr('Risk reserve', money(calc.riskReserve||0));
+  kr('Holding & fees', money((calc.holding||0)+(calc.fees||0)));
+  kr('Target Max Buy', money(calc.targetMaxBuy||0));
+
   y+=190;
-  const tbl=card(40,y,532,160,'Maintenance Deductions',cAmber); const headerY=tbl.cy-8;
-  doc.fontSize(10).fillColor(cMuted).text('Item',54,headerY,{width:200}); doc.text('Amount',340,headerY,{width:80,align:'right'}); doc.text('Why',430,headerY,{width:130});
-  doc.moveTo(50,headerY+14).lineTo(560,headerY+14).strokeColor(cRule).stroke(); doc.fillColor(cText);
-  let rowY=headerY+18; const rows=Array.isArray(items?.maintenance)?items.maintenance:[];
-  if(!rows.length){ doc.text('No maintenance deductions applied.',54,rowY); }
-  else { rows.forEach((it,i)=>{ const why=Array.isArray(it.rationale)?it.rationale.join(' • '):(it.rationale||''); const whyH=Math.max(14, doc.heightOfString(why,{width:130})); const rowH=Math.max(18, whyH)+4; const bg=(i%2===0)?'#F8FAFC':'#FFFFFF'; doc.rect(44,rowY-4,520,rowH).fill(bg); doc.fillColor(cText).text(it.label||'',54,rowY,{width:200}); doc.text(money(it.amount||0),340,rowY,{width:80,align:'right'}); doc.fillColor(cMuted).text(why,430,rowY,{width:130}); doc.fillColor(cText); rowY+=rowH; }); }
-  // Footer
+  const t=card(40,y,532,160,'Maintenance Deductions',cAmber);
+  const headerY=t.cy-8;
+  doc.fontSize(10).fillColor(cMuted).text('Item',54,headerY,{width:200});
+  doc.text('Amount',340,headerY,{width:80,align:'right'});
+  doc.text('Why',430,headerY,{width:130});
+  doc.moveTo(50,headerY+14).lineTo(560,headerY+14).strokeColor(cRule).stroke();
+  doc.fillColor(cText);
+  let rowY=headerY+18;
+  const rows=Array.isArray(items?.maintenance)?items.maintenance:[];
+  if(!rows.length){
+    doc.text('No maintenance deductions applied.',54,rowY);
+  } else {
+    rows.forEach((it,i)=>{
+      const why=Array.isArray(it.rationale)?it.rationale.join(' • '):(it.rationale||'');
+      const whyH=Math.max(14, doc.heightOfString(why,{width:130}));
+      const rowH=Math.max(18, whyH)+4;
+      const bg=(i%2===0)?'#F8FAFC':'#FFFFFF';
+      doc.rect(44,rowY-4,520,rowH).fill(bg);
+      doc.fillColor(cText).text(it.label||'',54,rowY,{width:200});
+      doc.text(money(it.amount||0),340,rowY,{width:80,align:'right'});
+      doc.fillColor(cMuted).text(why,430,rowY,{width:130});
+      doc.fillColor(cText);
+      rowY+=rowH;
+    });
+  }
+
   doc.fillColor(cMuted).fontSize(9);
   if (carfaxUrl) doc.text(`Carfax: ${carfaxUrl}`, 40, 740, { link: carfaxUrl, underline: true });
   doc.text('Estimates are guidance, not an offer. Final price depends on inspection and market.', 40, 752);
@@ -334,6 +384,7 @@ app.post('/api/report/customer', (req, res) => {
   stream.on('finish', ()=>res.json({ ok:true, url:`/reports/${path.basename(filePath)}` }));
 });
 
-// ---------- Health ----------
+// Health
 app.get('/healthz', (_,res)=>res.json({ ok:true }));
+
 app.listen(PORT, ()=>console.log('Server :'+PORT));

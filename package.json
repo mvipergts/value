@@ -1,6 +1,6 @@
 {
   "name": "used-car-project-pro",
-  "version": "6.2.0",
+  "version": "6.2.2",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
