@@ -143,13 +143,25 @@ app.post('/api/infer/maintenance', (req,res)=>{
 });
 
 // Evidence (NHTSA + TSB)
+function cleanModel(m){
+  if(!m) return m;
+  let s=String(m);
+  s = s.replace(/\(.*?\)/g,' ').replace(/[|•·]/g,' ').replace(/\s+/g,' ').trim();
+  // Keep up to first two tokens for common two-word models
+  const keepTwo = ['grand','range','sierra','silverado','model','transit','land','ram','civic','accord','escape','f-150','f150','cx-5','cx-9','e-class','c-class','3','5','6'];
+  const parts = s.split(' ');
+  if (parts.length<=2) return s;
+  if (keepTwo.includes(parts[0].toLowerCase())) return parts.slice(0,2).join(' ');
+  return parts[0];
+}
 app.post('/api/evidence/score', async (req,res)=>{
   try {
     const { vin='', vehicle='' } = req.body||{};
     let year=null, make=null, model=null;
     if (vehicle){ const parts=vehicle.split(/\s+/); const y=parseInt(parts[0],10); if(!isNaN(y)){ year=y; make=parts[1]||null; model=parts.slice(2).join(' ')||null; } }
-    if ((!year||!make||!model) && vin){
-      try{ const r=await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`); const j=await r.json(); const row=j?.Results?.[0]||{}; year=year||parseInt(row.ModelYear,10)||null; make=make||row.Make||null; model=model||row.Model||null; } catch {}
+    // Force VIN decode if model looks noisy
+    if ((model && /\s·\s|\(|\)/.test(model)) || (!year||!make||!model)) {
+      try{ const r=await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`); const j=await r.json(); const row=j?.Results?.[0]||{}; year=year||parseInt(row.ModelYear,10)||null; make=make||row.Make||null; model=cleanModel(model||row.Model||null); } catch {}
     }
     async function getJSON(url){ try{ const r=await fetch(url); return await r.json(); }catch(e){ return null; } }
     let recalls=[], complaints=[], tsbs=[];

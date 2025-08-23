@@ -47,7 +47,7 @@ tfoot td{ padding:8px; }
 <body>
 <div id="sticky">
   <div class="wrap">
-    <strong>Summary:</strong>
+    <strong id="sVehicle" class="muted">Vehicle</strong> • <strong>Summary:</strong>
     <span class="pill">Retail: <span id="sRetail">$0</span></span>
     <span class="pill">Wholesale: <span id="sWhole">$0</span></span>
     <span class="pill">Maint: <span id="sMaint">-$0</span></span>
@@ -190,8 +190,9 @@ tfoot td{ padding:8px; }
       </div>
       <div class="card">
         <h4>Proof</h4>
-        <details><summary class="muted">Carfax summary</summary><pre id="proofCarfax"></pre></details>
-        <details><summary class="muted">Evidence</summary><pre id="proofEvidence"></pre></details>
+        <div id="proofCarfaxPretty" class="card"></div>
+        <details><summary class="muted">Carfax summary (raw)</summary><pre id="proofCarfax"></pre></details>
+        <details><summary class="muted">Evidence (raw)</summary><pre id="proofEvidence"></pre></details>
       </div>
     </div>
   </div>
@@ -244,6 +245,23 @@ let carfaxUrl=null, carfaxSummary=null, carfaxText='';
 let maintItems=[], reconItems=[], evidence=null, calc=null, vehicleLabel='', decoded={};
 
 function fmt(n){ return '$'+Number(n||0).toLocaleString(); }
+function renderCarfaxPretty(sum){
+  try{
+    if(!sum || Object.keys(sum).length===0){ document.getElementById('proofCarfaxPretty').innerHTML='<span class="muted">No Carfax summary.</span>'; return; }
+    const rows = [
+      ['Accidents', sum.accidents],
+      ['Damage Reports', sum.damageReports],
+      ['Owners', sum.owners],
+      ['Service Records', sum.serviceRecords],
+      ['Recalls', sum.recalls],
+      ['Last Odometer', sum.lastOdometer || '—'],
+      ['Usage', sum.usage || '—'],
+      ['Brandings', (sum.brandings||[]).join(', ') || '—']
+    ];
+    const html = `<table><tbody>${rows.map(r=>`<tr><td class='muted'>${r[0]}</td><td style='text-align:right'>${r[1]}</td></tr>`).join('')}</tbody></table>`;
+    document.getElementById('proofCarfaxPretty').innerHTML = html;
+  }catch{ document.getElementById('proofCarfaxPretty').innerHTML=''; }
+}
 function setText(id, val){ const el=document.getElementById(id); if(el) el.textContent=val; }
 function showStep(n){ [1,2,3,4].forEach(i=>{ document.getElementById('step'+i).classList.toggle('hidden', i!==n); document.getElementById('step'+i+'Btn').classList.toggle('active', i===n); }); if(n===4) refreshOffer(); }
 
@@ -257,6 +275,7 @@ async function lookup(){
       decoded = v;
       vehicleLabel = [v.year, v.make, v.model, v.trim].filter(Boolean).join(' ');
       document.getElementById('vehicleBanner').innerHTML = `<strong style="font-size:18px">${vehicleLabel}</strong>${v.bodyClass?(' · '+v.bodyClass):''}${miles?(' · '+miles.toLocaleString()+' mi'):''}`;
+      document.getElementById('sVehicle').textContent = `${vehicleLabel}${miles?(' • '+miles.toLocaleString()+' mi'):''}`;
       valuation = await fetch(`/api/value/${vin}?mileage=${miles}&year=${v.year||''}`).then(r=>r.json());
       setText('vRetail', fmt(valuation.retail)); setText('vWholesale', fmt(valuation.wholesale));
       document.getElementById('valRaw').textContent = JSON.stringify(valuation,null,2);
@@ -366,8 +385,7 @@ function removeRecon(i){ reconItems.splice(i,1); renderRecon(); refreshOffer(); 
 
 async function getEvidence(){
   const vin=document.getElementById('vin').value.trim();
-  const vehicle=document.getElementById('vehicleBanner').innerText.trim();
-  const res=await fetch('/api/evidence/score',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin, vehicle })}).then(r=>r.json());
+  const res=await fetch('/api/evidence/score',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin })}).then(r=>r.json());
   if (!res || !res.ok) { alert('Evidence fetch failed'); return; }
   evidence = res;
   document.getElementById('riskBadge').textContent = `Recalls ${res.counts.recalls} • Complaints ${res.counts.complaints} • TSBs ${res.counts.tsbs}`;
@@ -404,6 +422,7 @@ async function refreshOffer(){
   setText('sRetail', fmt(calc.retailBase)); setText('sWhole', fmt(calc.wholesaleBase)); setText('sMaint', '-'+fmt(calc.maintDeduction)); setText('sRecon', fmt(calc.reconTotal)); setText('sRisk', fmt(calc.riskReserve)); setText('sMax', fmt(calc.targetMaxBuy));
   setText('oRetail', fmt(calc.retailBase)); setText('oWhole', fmt(calc.wholesaleBase)); setText('oMaint', '-'+fmt(calc.maintDeduction)); setText('oAdj', fmt(calc.adjWholesale)); setText('oRecon', fmt(calc.reconTotal)); setText('oRisk', fmt(calc.riskReserve)); setText('oHold', fmt((calc.holding||0)+(calc.fees||0))); setText('oMax', fmt(calc.targetMaxBuy));
   document.getElementById('proofCarfax').textContent = JSON.stringify(carfaxSummary||{},null,2);
+  renderCarfaxPretty(carfaxSummary||{});
   document.getElementById('proofEvidence').textContent = JSON.stringify(evidence||{},null,2);
 }
 
