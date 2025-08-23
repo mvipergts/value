@@ -94,14 +94,33 @@ function extractCarfaxSummary(text){
   const serviceRecords = (t.match(/service\s(record|history|performed|inspected|maintenance)/gi) || []).length;
   const recalls = (t.match(/recall/gi) || []).length;
   const lastOdometer = (t.match(/last reported odometer.*?([0-9,]{3,})/i)?.[1]) || (t.match(/odometer.*?:\s*([0-9,]{3,})/i)?.[1]) || null;
-  const brandingKeywords = ['salvage','rebuilt','junk','flood','lemon','hail','fire','odometer rollback','not actual mileage','tmu','structural damage'];
-  const brandings = brandingKeywords.filter(k => lower.includes(k));
   let usage = null;
   if (lower.includes('personal vehicle')) usage = 'Personal';
   else if (lower.includes('commercial vehicle')) usage = 'Commercial';
   else if (lower.includes('fleet vehicle')) usage = 'Fleet';
   else if (lower.includes('rental vehicle')) usage = 'Rental';
   else if (lower.includes('lease vehicle')) usage = 'Lease';
+
+  // --- Context-aware title branding detection ---
+  const brandingKeywords = ['salvage','rebuilt','junk','flood','lemon','hail','fire','odometer rollback','not actual mileage','tmu','structural damage'];
+  const lines = t.split(/\n+/).map(s=>s.trim().toLowerCase()).filter(Boolean);
+  const brandSet = new Set();
+  for (const line of lines){
+    if (!/(brand|title)/.test(line)) continue;            // must mention brand/title
+    if (/may include|include:/.test(line)) continue;      // skip disclaimers/lists
+    for (const kw of brandingKeywords){
+      const pattern = new RegExp('\\\\b'+kw.replace(/\\s+/g,'\\\\s+')+'\\\\b','i');
+      if (pattern.test(line)) brandSet.add(kw);
+    }
+  }
+  const branded = lower.match(/branded\\s+title\\s*[:\\-]?\\s*(salvage|rebuilt|junk|flood|lemon|hail|fire|not actual mileage|odometer rollback|structural damage)/gi) || [];
+  branded.forEach(m=>{
+    const m2 = m.toLowerCase().replace(/^branded\\s+title\\s*[:\\-]?\\s*/,'').trim();
+    if (m2) brandSet.add(m2);
+  });
+
+  const brandings = Array.from(brandSet);
+
   return { accidents: accidentHits, damageReports, owners, serviceRecords, recalls, lastOdometer, usage, brandings };
 }
 app.post('/api/carfax/upload', upload.single('file'), async (req,res)=>{
