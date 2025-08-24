@@ -211,6 +211,29 @@ function applyWeightedRetail(){
 
 
 window.addEventListener('error', (e)=>{ console.error('JS error', e.error||e.message); });
+// Diagnostics + robust bindings
+function setBadge(id, txt){ const el=document.getElementById(id); if(el) el.textContent = txt; }
+async function pingServer(){
+  try{ const r=await fetch('/api/health'); if(!r.ok) throw new Error(r.status); const j=await r.json(); setBadge('diagSrv','Server: OK'); }
+  catch(e){ setBadge('diagSrv','Server: DOWN'); }
+}
+function initApp(){
+  setBadge('diagJs','JS: Ready');
+  pingServer();
+  // Delegated click for Lookup
+  document.body.addEventListener('click', (ev)=>{
+    const act = ev.target.closest('[data-action="lookup"]');
+    if(act){ ev.preventDefault(); try{ lookupVIN(); }catch(e){ console.error(e); } }
+  });
+  // Enter on VIN triggers lookup
+  const vinI = document.getElementById('vin');
+  if (vinI){
+    vinI.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); lookupVIN(); } });
+  }
+}
+document.addEventListener('DOMContentLoaded', initApp);
+window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled rejection', e.reason); alert('Error: '+(e.reason&&e.reason.message?e.reason.message:e.reason)); });
+
 </script>
   <script>try { window.pdfjsLib = window['pdfjs-dist/build/pdf']; if (window.pdfjsLib && pdfjsLib.GlobalWorkerOptions) { pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.worker.min.js'; } } catch(e){ console.warn('PDF.js init failed', e); }
 async function readFileArrayBuffer(f){
@@ -375,6 +398,29 @@ function applyWeightedRetail(){
 
 
 window.addEventListener('error', (e)=>{ console.error('JS error', e.error||e.message); });
+// Diagnostics + robust bindings
+function setBadge(id, txt){ const el=document.getElementById(id); if(el) el.textContent = txt; }
+async function pingServer(){
+  try{ const r=await fetch('/api/health'); if(!r.ok) throw new Error(r.status); const j=await r.json(); setBadge('diagSrv','Server: OK'); }
+  catch(e){ setBadge('diagSrv','Server: DOWN'); }
+}
+function initApp(){
+  setBadge('diagJs','JS: Ready');
+  pingServer();
+  // Delegated click for Lookup
+  document.body.addEventListener('click', (ev)=>{
+    const act = ev.target.closest('[data-action="lookup"]');
+    if(act){ ev.preventDefault(); try{ lookupVIN(); }catch(e){ console.error(e); } }
+  });
+  // Enter on VIN triggers lookup
+  const vinI = document.getElementById('vin');
+  if (vinI){
+    vinI.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); lookupVIN(); } });
+  }
+}
+document.addEventListener('DOMContentLoaded', initApp);
+window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled rejection', e.reason); alert('Error: '+(e.reason&&e.reason.message?e.reason.message:e.reason)); });
+
 </script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js">
 async function readFileArrayBuffer(f){
@@ -539,6 +585,29 @@ function applyWeightedRetail(){
 
 
 window.addEventListener('error', (e)=>{ console.error('JS error', e.error||e.message); });
+// Diagnostics + robust bindings
+function setBadge(id, txt){ const el=document.getElementById(id); if(el) el.textContent = txt; }
+async function pingServer(){
+  try{ const r=await fetch('/api/health'); if(!r.ok) throw new Error(r.status); const j=await r.json(); setBadge('diagSrv','Server: OK'); }
+  catch(e){ setBadge('diagSrv','Server: DOWN'); }
+}
+function initApp(){
+  setBadge('diagJs','JS: Ready');
+  pingServer();
+  // Delegated click for Lookup
+  document.body.addEventListener('click', (ev)=>{
+    const act = ev.target.closest('[data-action="lookup"]');
+    if(act){ ev.preventDefault(); try{ lookupVIN(); }catch(e){ console.error(e); } }
+  });
+  // Enter on VIN triggers lookup
+  const vinI = document.getElementById('vin');
+  if (vinI){
+    vinI.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); lookupVIN(); } });
+  }
+}
+document.addEventListener('DOMContentLoaded', initApp);
+window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled rejection', e.reason); alert('Error: '+(e.reason&&e.reason.message?e.reason.message:e.reason)); });
+
 </script>
 </head>
 <body>
@@ -552,6 +621,8 @@ window.addEventListener('error', (e)=>{ console.error('JS error', e.error||e.mes
       <span class="badge">Recon: <span id="sumRecon">$0</span></span>
       <span class="badge">Risk: <span id="sumRisk">$0</span></span>
       <span class="badge">Max Buy: <span id="sumMax">$0</span></span>
+<span class="badge" id="diagJs">JS: …</span>
+<span class="badge" id="diagSrv">Server: …</span>
 <span class="badge no-print">PDF mode: <select id="pdfMode" onchange="setPdfMode(this.value)"><option value="customer" selected>Customer</option><option value="internal">Internal</option></select></span>
 <button class="btn no-print" onclick="printCustomer()">Print Customer</button>
 <button class="btn no-print" onclick="printInternal()">Print Internal</button>
@@ -570,7 +641,7 @@ window.addEventListener('error', (e)=>{ console.error('JS error', e.error||e.mes
       <div style="display:flex; gap:8px; flex-wrap:wrap">
         <input id="vin" placeholder="VIN" style="min-width:260px">
         <input id="miles" type="number" min="0" placeholder="Mileage">
-        <button id="btnLookup" class="btn primary" onclick="lookupVIN()">Lookup</button>
+        <button id="btnLookup" class="btn primary" type="button" data-action="lookup" onclick="lookupVIN()">Lookup</button>
       </div>
       <div id="vehicleBanner" class="muted" style="margin-top:8px"></div>
     </div>
@@ -774,6 +845,8 @@ async async function lookupVIN(){
     window.vehicle = dec.vehicle || {};
     const t = `${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}${miles?(' • '+miles.toLocaleString()+' mi'):''}`.trim();
     const banner = document.getElementById('vehicleBanner');
+    if (banner){ banner.innerHTML = `<em>Decoding VIN…</em>`; }
+    // After decode
     if (banner){ banner.innerHTML = `<strong>${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}</strong>${vehicle.bodyClass?(' · '+vehicle.bodyClass):''}${miles?(' · '+miles.toLocaleString()+' mi'):''}`; }
     const chip = document.getElementById('sVehicle'); if(chip) chip.textContent = t;
 
@@ -1163,6 +1236,29 @@ function applyWeightedRetail(){
 
 
 window.addEventListener('error', (e)=>{ console.error('JS error', e.error||e.message); });
+// Diagnostics + robust bindings
+function setBadge(id, txt){ const el=document.getElementById(id); if(el) el.textContent = txt; }
+async function pingServer(){
+  try{ const r=await fetch('/api/health'); if(!r.ok) throw new Error(r.status); const j=await r.json(); setBadge('diagSrv','Server: OK'); }
+  catch(e){ setBadge('diagSrv','Server: DOWN'); }
+}
+function initApp(){
+  setBadge('diagJs','JS: Ready');
+  pingServer();
+  // Delegated click for Lookup
+  document.body.addEventListener('click', (ev)=>{
+    const act = ev.target.closest('[data-action="lookup"]');
+    if(act){ ev.preventDefault(); try{ lookupVIN(); }catch(e){ console.error(e); } }
+  });
+  // Enter on VIN triggers lookup
+  const vinI = document.getElementById('vin');
+  if (vinI){
+    vinI.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); lookupVIN(); } });
+  }
+}
+document.addEventListener('DOMContentLoaded', initApp);
+window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled rejection', e.reason); alert('Error: '+(e.reason&&e.reason.message?e.reason.message:e.reason)); });
+
 </script>
 </body>
 </html>
