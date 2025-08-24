@@ -835,11 +835,74 @@ async async function lookupVIN(){
   const btn = document.getElementById('btnLookup');
   try{
     if(btn){ btn.disabled = true; btn.textContent = 'Looking up…'; }
-    setStatus('Starting lookup…');
+    setStatus('Decoding VIN (VPIC)…');
     const vin = (document.getElementById('vin')||{value:''}).value.trim();
     const miles = Number((document.getElementById('miles')||{value:0}).value||0);
     if(!vin){ alert('Enter a VIN'); setStatus('Enter a VIN'); return; }
 
+    // 1) VPIC FIRST — instant banner
+    let vehicle = {};
+    try{
+      const r = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${encodeURIComponent(vin)}?format=json`);
+      const j = await r.json();
+      const row = j?.Results?.[0] || {};
+      vehicle = { year: row.ModelYear||null, make: row.Make||null, model: row.Model||null, bodyClass: row.BodyClass||null };
+      window.vehicle = vehicle;
+      const banner = document.getElementById('vehicleBanner');
+      const chip = document.getElementById('sVehicle');
+      const t = `${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}${miles?(' • '+miles.toLocaleString()+' mi'):''}`.trim();
+      if (chip) chip.textContent = t;
+      if (banner){ banner.innerHTML = `<strong>${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}</strong>${vehicle.bodyClass?(' · '+vehicle.bodyClass):''}${miles?(' · '+miles.toLocaleString()+' mi'):''}`; }
+      setStatus('Vehicle identified. Fetching evidence…');
+    }catch(e){
+      console.warn('VPIC failed', e);
+      setStatus('Could not decode via VPIC. Trying server evidence…');
+    }
+
+    // Reveal steps immediately so user can keep going
+    document.getElementById('step2') && (document.getElementById('step2').style.display='block');
+    document.getElementById('step3') && (document.getElementById('step3').style.display='block');
+    document.getElementById('step4') && (document.getElementById('step4').style.display='block');
+
+    // Kick off evidence fetch in background (do not block UI)
+    (async ()=>{
+      try{
+        const res = await fetch('/api/evidence/score', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin }) });
+        const dec = await res.json();
+        if(dec && dec.ok){
+          window.vehicle = dec.vehicle || window.vehicle || {};
+          if (typeof renderEvidence === 'function'){ renderEvidence(dec); }
+          setStatus('Evidence loaded.');
+        }else{
+          setStatus('Evidence fetch failed (server).');
+        }
+      }catch(e){ console.warn('Evidence fetch failed', e); setStatus('Evidence fetch failed.'); }
+    })();
+
+    // Kick off maintenance stub fetch (non-blocking)
+    (async ()=>{
+      try{
+        const m = await fetch(`/api/maintenance/${vin}`).then(r=>r.json());
+        const el = document.getElementById('intervals');
+        if (el) el.innerHTML = Object.entries(m.intervals||{}).map(([k,v])=>`<li><strong>${k}</strong>: ${v}</li>`).join('');
+      }catch(e){ /* ignore */ }
+    })();
+
+    if (typeof refreshOffer === 'function') refreshOffer();
+  }catch(e){
+    console.error('Lookup error:', e);
+    alert('Lookup failed: '+ (e && e.message ? e.message : e));
+    setStatus('Lookup failed.');
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = 'Lookup'; }
+  }
+}
+
+// Ensure click binding
+document.addEventListener('DOMContentLoaded', ()=>{
+  const b = document.getElementById('btnLookup');
+  if (b) b.addEventListener('click', (ev)=>{ ev.preventDefault(); try{ lookupVIN(); }catch(e){ console.error(e); } });
+});
     // Try server-side evidence first
     let dec;
     try{
