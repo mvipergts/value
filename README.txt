@@ -1,8 +1,15 @@
-Used Car Project Pro v6.3.0
-Adds:
-- Cars.com comps via SerpAPI (optional) + manual paste.
-- Facebook Marketplace manual comps (optional). SerpAPI mode available if SERPAPI_KEY set, but manual is recommended.
-- KBB / Black Book manual entry and a Weighted Retail button.
-Env Vars:
-- EBAY_APP_ID (for eBay Finding API; already supported)
-- SERPAPI_KEY (optional; for Cars.com/Marketplace via SerpAPI)
+Used Car Project Pro v6.3.1 (CommonJS)
+Fixes:
+- Avoids ESM loader issues ('Unexpected token const/import') by using CommonJS server.js.
+- Uses Node's native fetch (Node >=18) — no node-fetch dependency.
+
+Includes:
+- eBay SOLD/ACTIVE comps (EBAY_APP_ID)
+- Cars.com & FB comps via SerpAPI (optional SERPAPI_KEY) + manual paste
+- KBB/Black Book manual entry + Weighted Retail
+- Auto NHTSA Top Risks per VIN, branding parser, $2k profit floor, sticky summary.
+
+Deploy:
+- Start: node server.js
+- Node: >=18 <23
+- Env: EBAY_APP_ID (required for eBay), SERPAPI_KEY (optional)

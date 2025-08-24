@@ -1,8 +1,7 @@
 {
   "name": "used-car-project-pro",
-  "version": "6.2.7",
+  "version": "6.3.1",
   "private": true,
-  "type": "module",
   "engines": {
     "node": ">=18 <23"
   },
@@ -11,7 +10,6 @@
   },
   "dependencies": {
     "express": "^4.19.2",
-    "multer": "^1.4.5-lts.1",
-    "node-fetch": "^3.3.2"
+    "multer": "^1.4.5-lts.1"
   }
 }

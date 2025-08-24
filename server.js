@@ -1,25 +1,21 @@
 
-import express from 'express';
-import path from 'path';
-import multer from 'multer';
-import fetch from 'node-fetch';
-import fs from 'fs';
+const express = require('express');
+const path = require('path');
+const multer = require('multer');
+const fs = require('fs');
 
 const app = express();
-const __dirname = path.resolve();
 app.use(express.json({limit:'10mb'}));
 app.use(express.urlencoded({extended:true}));
 
 const upload = multer({ dest: 'uploads/' });
-
-// Settings
 const SETTINGS_PATH = path.join(__dirname, 'data', 'settings.json');
 let S = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8'));
 
-// Serve static
+// Static
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Basic maintenance stub
+// Maintenance stub
 app.get('/api/maintenance/:vin', (req,res)=>{
   res.json({
     vin: req.params.vin,
@@ -29,24 +25,15 @@ app.get('/api/maintenance/:vin', (req,res)=>{
   });
 });
 
-// VIN decode via VPIC
 async function decodeVIN(vin){
   try{
-    const r = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${vin}?format=json`);
+    const r = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${encodeURIComponent(vin)}?format=json`);
     const j = await r.json();
     const row = j?.Results?.[0] || {};
-    return {
-      year: row.ModelYear || null,
-      make: row.Make || null,
-      model: row.Model || null,
-      bodyClass: row.BodyClass || null
-    };
-  }catch(e){
-    return { year:null, make:null, model:null, bodyClass:null };
-  }
+    return { year: row.ModelYear||null, make: row.Make||null, model: row.Model||null, bodyClass: row.BodyClass||null };
+  }catch(e){ return { year:null, make:null, model:null, bodyClass:null }; }
 }
 
-// Carfax text parser
 function extractCarfaxSummary(text){
   const t = (text || '').replace(/\r/g, '');
   const lower = t.toLowerCase();
@@ -76,7 +63,7 @@ function extractCarfaxSummary(text){
   }
   const branded = lower.match(/branded\s+title\s*[:\-]?\s*(salvage|rebuilt|junk|flood|lemon|hail|fire|not actual mileage|odometer rollback|structural damage)/gi) || [];
   branded.forEach(m=>{
-    const m2 = m.toLowerCase().replace(/^branded\s+title\s*[:\-]?\s*/,'').trim();
+    const m2 = m.toLowerCase().replace(/^branded\\s+title\\s*[:\\-]?\\s*/,'').trim();
     if (m2) brandSet.add(m2);
   });
   const brandings = Array.from(brandSet);
@@ -84,19 +71,20 @@ function extractCarfaxSummary(text){
   return { accidents, damageReports, owners, serviceRecords, recalls, lastOdometer, usage, brandings };
 }
 
-// Upload Carfax (file or text)
 app.post('/api/carfax/upload', upload.single('file'), async (req,res)=>{
   try{
     let text = req.body.text || '';
-    if (req.file){ text += '\n' + fs.readFileSync(req.file.path,'utf-8'); fs.unlink(req.file.path, ()=>{}); }
+    if (req.file){
+      try{
+        text += '\n' + fs.readFileSync(req.file.path,'utf-8');
+      }catch(e){ /* ignore non-text uploads */ }
+      fs.unlink(req.file.path, ()=>{});
+    }
     const summary = extractCarfaxSummary(text);
     res.json({ ok:true, summary });
-  }catch(e){
-    res.json({ ok:false, error: e.message });
-  }
+  }catch(e){ res.json({ ok:false, error:e.message }); }
 });
 
-// Evidence (NHTSA recalls) + simple risk scoring
 const RISK_TAGS = [
   { key:'Engine / Oil consumption', words:['engine','oil','pcv','valve cover','consumption'] },
   { key:'Transmission', words:['transmission','cvt','gear','shift','clutch'] },
@@ -110,7 +98,6 @@ app.post('/api/evidence/score', async (req,res)=>{
     const vin = (req.body.vin||'').trim();
     const dec = await decodeVIN(vin);
 
-    // Recalls
     let recallResults = [];
     try{
       const r = await fetch(`https://api.nhtsa.gov/recalls/recallsByVehicle?vin=${encodeURIComponent(vin)}`);
@@ -118,54 +105,21 @@ app.post('/api/evidence/score', async (req,res)=>{
       recallResults = j?.results || j?.Results || [];
     }catch(e){}
 
-    // Simple counts
     const counts = { recalls: recallResults.length, complaints: 0, tsbs: 0 };
 
-    // Score by recall titles
     const topRisks = [];
     for (const tag of RISK_TAGS){
       const hits = recallResults.filter(rc=> tag.words.some(w => String(rc.Component||rc.Summary||rc.Consequence||'').toLowerCase().includes(w)));
       if (hits.length){
-        topRisks.push({
-          label: tag.key,
-          score: Math.min(2, hits.length>=1 ? 2 : 1),
-          rationale: 'Recall mention (+2)',
-          complaints: 0,
-          recall: hits.length>0,
-          tsb: false,
-          checks: []
-        });
+        topRisks.push({ label: tag.key, score: 2, rationale: 'Recall mention (+2)', complaints: 0, recall: true, tsb: false, checks: [] });
       }
     }
 
     res.json({ ok:true, vehicle: dec, counts, topRisks });
-  }catch(e){
-    res.json({ ok:false, error:e.message });
-  }
+  }catch(e){ res.json({ ok:false, error:e.message }); }
 });
 
-// Offer calc (includes desiredProfit on both ceilings)
-app.post('/api/offer/calc', (req,res)=>{
-  try{
-    const { retailBase, wholesaleBase, maintDeduction, reconTotal, riskReserve } = req.body;
-    const adjWholesale = (wholesaleBase||0) - (maintDeduction||0);
-    const holding = Math.round((S.holdingPercent||0)* (retailBase||0));
-    const fees = S.docFee||0;
-    const ceiling1 = adjWholesale - (reconTotal||0) - (riskReserve||0) - (S.desiredProfit||0);
-    const ceiling2 = (retailBase||0) - (S.desiredProfit||0) - (reconTotal||0) - holding - fees;
-    const targetMaxBuy = Math.min(ceiling1, ceiling2);
-    res.json({ ok:true, numbers:{
-      retailBase, wholesaleBase, maintDeduction, adjWholesale, reconTotal, riskReserve,
-      desiredProfit:S.desiredProfit||0, holding, fees, targetMaxBuy
-    }});
-  }catch(e){
-    res.json({ ok:false, error:e.message });
-  }
-});
-
-app.listen(3000, ()=> console.log('Server on http://localhost:3000'));
-
-// eBay comps (requires EBAY_APP_ID Finding API key)
+// eBay comps
 app.get('/api/ebay/comps', async (req,res)=>{
   try{
     const appid = process.env.EBAY_APP_ID || '';
@@ -184,15 +138,15 @@ app.get('/api/ebay/comps', async (req,res)=>{
       url += `&buyerPostalCode=${encodeURIComponent(zip)}&itemFilter(1).name=MaxDistance&itemFilter(1).value=${encodeURIComponent(String(radius||'500'))}`;
     }
     url += `&itemFilter(2).name=Condition&itemFilter(2).value(0)=Used`;
+
     const r = await fetch(url);
     const j = await r.json();
-    const root = j?.findCompletedItemsResponse?.[0] || j?.findItemsAdvancedResponse?.[0] || {};
+    const root = (j?.findCompletedItemsResponse?.[0]) || (j?.findItemsAdvancedResponse?.[0]) || {};
     const ack = root.ack?.[0];
     if (ack !== 'Success' && ack !== 'Warning'){
       return res.json({ ok:false, error:'eBay API error', raw:j });
     }
-    const arr = (root.searchResult?.[0]?.item || []);
-    const items = arr.map(it=>{
+    const items = (root.searchResult?.[0]?.item || []).map(it=>{
       const priceObj = (it.sellingStatus?.[0]?.convertedCurrentPrice?.[0]) || (it.sellingStatus?.[0]?.currentPrice?.[0]) || {};
       const price = Number(priceObj.__value__ || 0);
       const url = it.viewItemURL?.[0];
@@ -204,7 +158,7 @@ app.get('/api/ebay/comps', async (req,res)=>{
     }).filter(x=>x.price>100);
     const prices = items.map(x=>x.price).sort((a,b)=>a-b);
     const n = prices.length;
-    const median = n? (n%2 ? prices[(n-1)//2] : (prices[n//2-1]+prices[n//2])/2) : 0;
+    const median = n? (n%2 ? prices[(n-1)>>1] : (prices[(n>>1)-1]+prices[n>>1])/2) : 0;
     const avg = n? prices.reduce((a,b)=>a+b,0)/n : 0;
     const min = n? prices[0] : 0;
     const max = n? prices[n-1] : 0;
@@ -212,8 +166,7 @@ app.get('/api/ebay/comps', async (req,res)=>{
   }catch(e){ res.json({ ok:false, error:e.message }); }
 });
 
-// Generic SERP comps using SerpAPI (Google). Optional and ToS-friendly via provider.
-// Env: SERPAPI_KEY
+// SerpAPI comps (Cars.com / FB) – optional
 app.get('/api/serp/comps', async (req,res)=>{
   try{
     const key = process.env.SERPAPI_KEY || '';
@@ -237,17 +190,15 @@ app.get('/api/serp/comps', async (req,res)=>{
     }
     const prices = items.map(x=>x.price).sort((a,b)=>a-b);
     const n = prices.length;
-    const median = n? (n%2 ? prices[(n-1)//2] : (prices[n//2-1]+prices[n//2])/2) : 0;
+    const median = n? (n%2 ? prices[(n-1)>>1] : (prices[(n>>1)-1]+prices[n>>1])/2) : 0;
     const avg = n? prices.reduce((a,b)=>a+b,0)/n : 0;
     const min = n? prices[0] : 0;
     const max = n? prices[n-1] : 0;
     res.json({ ok:true, query:{site, year, make, model, zip}, stats:{count:n, median, avg, min, max}, items });
-  }catch(e){
-    res.json({ ok:false, error:e.message });
-  }
+  }catch(e){ res.json({ ok:false, error:e.message }); }
 });
 
-// Manual comps ingest (paste: price - title - url)
+// Manual comps paste
 app.post('/api/comps/manual', async (req,res)=>{
   try{
     const text = (req.body.text||'').split('\n').map(s=>s.trim()).filter(Boolean);
@@ -264,10 +215,26 @@ app.post('/api/comps/manual', async (req,res)=>{
     }
     const prices = items.map(x=>x.price).sort((a,b)=>a-b);
     const n = prices.length;
-    const median = n? (n%2 ? prices[(n-1)//2] : (prices[n//2-1]+prices[n//2])/2) : 0;
+    const median = n? (n%2 ? prices[(n-1)>>1] : (prices[(n>>1)-1]+prices[n>>1])/2) : 0;
     const avg = n? prices.reduce((a,b)=>a+b,0)/n : 0;
     const min = n? prices[0] : 0;
     const max = n? prices[n-1] : 0;
     res.json({ ok:true, stats:{count:n, median, avg, min, max}, items });
   }catch(e){ res.json({ ok:false, error:e.message }); }
 });
+
+app.post('/api/offer/calc', (req,res)=>{
+  try{
+    const { retailBase=0, wholesaleBase=0, maintDeduction=0, reconTotal=0, riskReserve=0 } = req.body||{};
+    const adjWholesale = wholesaleBase - maintDeduction;
+    const holding = Math.round((S.holdingPercent||0)* retailBase);
+    const fees = S.docFee||0;
+    const ceiling1 = adjWholesale - reconTotal - riskReserve - (S.desiredProfit||0);
+    const ceiling2 = retailBase - (S.desiredProfit||0) - reconTotal - holding - fees;
+    const targetMaxBuy = Math.min(ceiling1, ceiling2);
+    res.json({ ok:true, numbers:{ retailBase, wholesaleBase, maintDeduction, adjWholesale, reconTotal, riskReserve, desiredProfit:(S.desiredProfit||0), holding, fees, targetMaxBuy } });
+  }catch(e){ res.json({ ok:false, error:e.message }); }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, ()=> console.log('Server on http://localhost:'+PORT));
