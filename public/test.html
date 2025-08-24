@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Lookup Test</title>
+<style>body{font-family:sans-serif; max-width:720px; margin:20px auto;}</style>
+<h1>Lookup Test</h1>
+<p>If this page works, your browser & network are fine. If the main app still fails, it's a page-script issue.</p>
+<div style="display:flex; gap:8px">
+  <input id="vin" placeholder="VIN" value="1HGCR2F53FA129176" style="min-width:320px">
+  <button id="go">Lookup</button>
+</div>
+<pre id="out"></pre>
+<script>
+function log(msg){ document.getElementById('out').textContent += (typeof msg==='string'? msg : JSON.stringify(msg,null,2)) + "\\n"; }
+document.getElementById('go').onclick = async ()=>{
+  log('VPIC decoding...');
+  const vin = document.getElementById('vin').value.trim();
+  try{
+    const r = await fetch('https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/'+encodeURIComponent(vin)+'?format=json');
+    const j = await r.json();
+    const row = j?.Results?.[0] || {};
+    log({year:row.ModelYear, make:row.Make, model:row.Model, bodyClass:row.BodyClass});
+  }catch(e){ log(String(e)); }
+  try{
+    log('Server evidence...');
+    const r2 = await fetch('/api/evidence/score',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vin})});
+    const j2 = await r2.json();
+    log(j2);
+  }catch(e){ log(String(e)); }
+};
+</script>

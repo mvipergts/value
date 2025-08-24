@@ -240,3 +240,28 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, ()=> console.log('Server on http://localhost:'+PORT));
 
 app.get('/api/health', (req,res)=>res.json({ok:true, time: Date.now()}));
+
+
+// Settings endpoints (persist to data/settings.json)
+app.get('/api/settings', (req,res)=>{
+  try{
+    const raw = fs.readFileSync(SETTINGS_PATH, 'utf-8');
+    res.json({ ok:true, settings: JSON.parse(raw) });
+  }catch(e){ res.json({ ok:false, error:e.message }); }
+});
+app.post('/api/settings', async (req,res)=>{
+  try{
+    const allowed = ['desiredProfit','riskReservePerRecall','holdingPercent','docFee'];
+    const next = Object.assign({}, S);
+    for (const k of allowed){
+      if (k in req.body){
+        let v = req.body[k];
+        if (typeof v === 'string') v = Number(v);
+        next[k] = v;
+      }
+    }
+    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(next, null, 2));
+    S = next;
+    res.json({ ok:true, settings: S });
+  }catch(e){ res.json({ ok:false, error:e.message }); }
+});

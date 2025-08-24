@@ -236,6 +236,40 @@ window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled re
 
 
 function setStatus(msg){ const el=document.getElementById('statusLine'); if(el) el.textContent = msg||''; }
+
+function openSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='flex'; loadSettingsIntoModal(); } }
+function closeSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='none'; } }
+async function loadSettingsIntoModal(){
+  try{
+    const r = await fetch('/api/settings'); const j = await r.json();
+    if(j.ok){
+      const s = j.settings||{};
+      document.getElementById('setProfit').value = s.desiredProfit ?? 2000;
+      document.getElementById('setDoc').value = s.docFee ?? 200;
+      document.getElementById('setHold').value = s.holdingPercent ?? 0.02;
+      document.getElementById('setRisk').value = s.riskReservePerRecall ?? 80;
+    }
+  }catch(e){ console.warn('load settings failed', e); }
+}
+async function saveSettings(){
+  const body = {
+    desiredProfit: Number(document.getElementById('setProfit').value||0),
+    docFee: Number(document.getElementById('setDoc').value||0),
+    holdingPercent: Number(document.getElementById('setHold').value||0),
+    riskReservePerRecall: Number(document.getElementById('setRisk').value||0),
+  };
+  try{
+    const r = await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const j = await r.json();
+    if(j.ok){ closeSettings(); if (typeof refreshOffer==='function') refreshOffer(); }
+    else alert('Save failed: '+(j.error||'unknown'));
+  }catch(e){ alert('Save failed'); }
+}
+// Close modal on background click
+document.addEventListener('click', (ev)=>{
+  const m=document.getElementById('settingsModal');
+  if(m && ev.target===m){ closeSettings(); }
+});
 </script>
   <script>try { window.pdfjsLib = window['pdfjs-dist/build/pdf']; if (window.pdfjsLib && pdfjsLib.GlobalWorkerOptions) { pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.worker.min.js'; } } catch(e){ console.warn('PDF.js init failed', e); }
 async function readFileArrayBuffer(f){
@@ -425,6 +459,40 @@ window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled re
 
 
 function setStatus(msg){ const el=document.getElementById('statusLine'); if(el) el.textContent = msg||''; }
+
+function openSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='flex'; loadSettingsIntoModal(); } }
+function closeSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='none'; } }
+async function loadSettingsIntoModal(){
+  try{
+    const r = await fetch('/api/settings'); const j = await r.json();
+    if(j.ok){
+      const s = j.settings||{};
+      document.getElementById('setProfit').value = s.desiredProfit ?? 2000;
+      document.getElementById('setDoc').value = s.docFee ?? 200;
+      document.getElementById('setHold').value = s.holdingPercent ?? 0.02;
+      document.getElementById('setRisk').value = s.riskReservePerRecall ?? 80;
+    }
+  }catch(e){ console.warn('load settings failed', e); }
+}
+async function saveSettings(){
+  const body = {
+    desiredProfit: Number(document.getElementById('setProfit').value||0),
+    docFee: Number(document.getElementById('setDoc').value||0),
+    holdingPercent: Number(document.getElementById('setHold').value||0),
+    riskReservePerRecall: Number(document.getElementById('setRisk').value||0),
+  };
+  try{
+    const r = await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const j = await r.json();
+    if(j.ok){ closeSettings(); if (typeof refreshOffer==='function') refreshOffer(); }
+    else alert('Save failed: '+(j.error||'unknown'));
+  }catch(e){ alert('Save failed'); }
+}
+// Close modal on background click
+document.addEventListener('click', (ev)=>{
+  const m=document.getElementById('settingsModal');
+  if(m && ev.target===m){ closeSettings(); }
+});
 </script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js">
 async function readFileArrayBuffer(f){
@@ -614,6 +682,40 @@ window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled re
 
 
 function setStatus(msg){ const el=document.getElementById('statusLine'); if(el) el.textContent = msg||''; }
+
+function openSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='flex'; loadSettingsIntoModal(); } }
+function closeSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='none'; } }
+async function loadSettingsIntoModal(){
+  try{
+    const r = await fetch('/api/settings'); const j = await r.json();
+    if(j.ok){
+      const s = j.settings||{};
+      document.getElementById('setProfit').value = s.desiredProfit ?? 2000;
+      document.getElementById('setDoc').value = s.docFee ?? 200;
+      document.getElementById('setHold').value = s.holdingPercent ?? 0.02;
+      document.getElementById('setRisk').value = s.riskReservePerRecall ?? 80;
+    }
+  }catch(e){ console.warn('load settings failed', e); }
+}
+async function saveSettings(){
+  const body = {
+    desiredProfit: Number(document.getElementById('setProfit').value||0),
+    docFee: Number(document.getElementById('setDoc').value||0),
+    holdingPercent: Number(document.getElementById('setHold').value||0),
+    riskReservePerRecall: Number(document.getElementById('setRisk').value||0),
+  };
+  try{
+    const r = await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const j = await r.json();
+    if(j.ok){ closeSettings(); if (typeof refreshOffer==='function') refreshOffer(); }
+    else alert('Save failed: '+(j.error||'unknown'));
+  }catch(e){ alert('Save failed'); }
+}
+// Close modal on background click
+document.addEventListener('click', (ev)=>{
+  const m=document.getElementById('settingsModal');
+  if(m && ev.target===m){ closeSettings(); }
+});
 </script>
 </head>
 <body>
@@ -644,11 +746,11 @@ function setStatus(msg){ const el=document.getElementById('statusLine'); if(el) 
     <!-- Step 1 -->
     <div class="card" id="step1">
       <h3>1) Identify</h3>
-      <div style="display:flex; gap:8px; flex-wrap:wrap">
+      <form id="vinForm" onsubmit="event.preventDefault(); lookupVIN();" style="display:flex; gap:8px; flex-wrap:wrap">
         <input id="vin" placeholder="VIN" style="min-width:260px">
         <input id="miles" type="number" min="0" placeholder="Mileage">
         <button id="btnLookup" class="btn primary" type="button" data-action="lookup" onclick="lookupVIN()">Lookup</button>
-      </div>
+      </form>
       <div id="vehicleBanner" class="muted" style="margin-top:8px"></div>
 <div id="statusLine" class="muted" style="margin-top:6px"></div>
     </div>
@@ -683,7 +785,7 @@ function setStatus(msg){ const el=document.getElementById('statusLine'); if(el) 
         </div>
 
         <div class="card">
-          <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <form id="vinForm" onsubmit="event.preventDefault(); lookupVIN();" style="display:flex; gap:8px; flex-wrap:wrap">
             <button class="btn">+ Tires</button>
             <button class="btn">+ Windshield</button>
             <button class="btn">+ Detail</button>
@@ -749,7 +851,7 @@ function setStatus(msg){ const el=document.getElementById('statusLine'); if(el) 
         <div class="card" id="carsCard">
           <h4>Cars.com (Optional)</h4>
           <div class="muted" style="margin-bottom:6px">Uses SerpAPI if <code>SERPAPI_KEY</code> is set. Otherwise, paste comps manually below.</div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <form id="vinForm" onsubmit="event.preventDefault(); lookupVIN();" style="display:flex; gap:8px; flex-wrap:wrap">
             <button class="btn" onclick="fetchSerp('cars')">Fetch Cars.com</button>
             <button class="btn" onclick="useCarsMedian()">Use Cars.com Median as Retail</button>
           </div>
@@ -1394,6 +1496,57 @@ window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled re
 
 
 function setStatus(msg){ const el=document.getElementById('statusLine'); if(el) el.textContent = msg||''; }
+
+function openSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='flex'; loadSettingsIntoModal(); } }
+function closeSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='none'; } }
+async function loadSettingsIntoModal(){
+  try{
+    const r = await fetch('/api/settings'); const j = await r.json();
+    if(j.ok){
+      const s = j.settings||{};
+      document.getElementById('setProfit').value = s.desiredProfit ?? 2000;
+      document.getElementById('setDoc').value = s.docFee ?? 200;
+      document.getElementById('setHold').value = s.holdingPercent ?? 0.02;
+      document.getElementById('setRisk').value = s.riskReservePerRecall ?? 80;
+    }
+  }catch(e){ console.warn('load settings failed', e); }
+}
+async function saveSettings(){
+  const body = {
+    desiredProfit: Number(document.getElementById('setProfit').value||0),
+    docFee: Number(document.getElementById('setDoc').value||0),
+    holdingPercent: Number(document.getElementById('setHold').value||0),
+    riskReservePerRecall: Number(document.getElementById('setRisk').value||0),
+  };
+  try{
+    const r = await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const j = await r.json();
+    if(j.ok){ closeSettings(); if (typeof refreshOffer==='function') refreshOffer(); }
+    else alert('Save failed: '+(j.error||'unknown'));
+  }catch(e){ alert('Save failed'); }
+}
+// Close modal on background click
+document.addEventListener('click', (ev)=>{
+  const m=document.getElementById('settingsModal');
+  if(m && ev.target===m){ closeSettings(); }
+});
 </script>
+
+<div id="settingsModal" class="no-print" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.35); z-index:1000">
+  <div class="card" style="width:520px; max-width:90vw; background:#fff">
+    <h3>Settings</h3>
+    <div class="muted">These apply to offer math immediately.</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px">
+      <label>Desired Profit ($)<br><input id="setProfit" type="number" min="0"></label>
+      <label>Doc Fee ($)<br><input id="setDoc" type="number" min="0"></label>
+      <label>Holding % (0–0.1)<br><input id="setHold" type="number" step="0.001" min="0" max="0.5"></label>
+      <label>Risk per Recall ($)<br><input id="setRisk" type="number" min="0"></label>
+    </div>
+    <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end">
+      <button class="btn" onclick="closeSettings()">Cancel</button>
+      <button class="btn primary" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
