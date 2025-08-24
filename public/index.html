@@ -234,6 +234,8 @@ function initApp(){
 document.addEventListener('DOMContentLoaded', initApp);
 window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled rejection', e.reason); alert('Error: '+(e.reason&&e.reason.message?e.reason.message:e.reason)); });
 
+
+function setStatus(msg){ const el=document.getElementById('statusLine'); if(el) el.textContent = msg||''; }
 </script>
   <script>try { window.pdfjsLib = window['pdfjs-dist/build/pdf']; if (window.pdfjsLib && pdfjsLib.GlobalWorkerOptions) { pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.worker.min.js'; } } catch(e){ console.warn('PDF.js init failed', e); }
 async function readFileArrayBuffer(f){
@@ -421,6 +423,8 @@ function initApp(){
 document.addEventListener('DOMContentLoaded', initApp);
 window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled rejection', e.reason); alert('Error: '+(e.reason&&e.reason.message?e.reason.message:e.reason)); });
 
+
+function setStatus(msg){ const el=document.getElementById('statusLine'); if(el) el.textContent = msg||''; }
 </script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js">
 async function readFileArrayBuffer(f){
@@ -608,6 +612,8 @@ function initApp(){
 document.addEventListener('DOMContentLoaded', initApp);
 window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled rejection', e.reason); alert('Error: '+(e.reason&&e.reason.message?e.reason.message:e.reason)); });
 
+
+function setStatus(msg){ const el=document.getElementById('statusLine'); if(el) el.textContent = msg||''; }
 </script>
 </head>
 <body>
@@ -644,6 +650,7 @@ window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled re
         <button id="btnLookup" class="btn primary" type="button" data-action="lookup" onclick="lookupVIN()">Lookup</button>
       </div>
       <div id="vehicleBanner" class="muted" style="margin-top:8px"></div>
+<div id="statusLine" class="muted" style="margin-top:6px"></div>
     </div>
 
     <!-- Step 2 (Carfax) -->
@@ -828,12 +835,75 @@ async async function lookupVIN(){
   const btn = document.getElementById('btnLookup');
   try{
     if(btn){ btn.disabled = true; btn.textContent = 'Looking up…'; }
+    setStatus('Starting lookup…');
     const vin = (document.getElementById('vin')||{value:''}).value.trim();
     const miles = Number((document.getElementById('miles')||{value:0}).value||0);
-    if(!vin){ alert('Enter a VIN'); return; }
-    // Quick server health check (optional)
-    try { await fetch('/api/health').then(r=>r.json()); } catch(e){ console.warn('Health check failed', e); }
+    if(!vin){ alert('Enter a VIN'); setStatus('Enter a VIN'); return; }
 
+    // Try server-side evidence first
+    let dec;
+    try{
+      const res = await fetch('/api/evidence/score', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ vin })
+      });
+      if(!res.ok) throw new Error('Server returned '+res.status);
+      dec = await res.json();
+      if(!dec.ok) throw new Error(dec.error || 'VIN decode failed');
+      setStatus('Server decode OK.');
+    }catch(e){
+      // Client-side fallback to VPIC
+      setStatus('Server decode failed, trying VPIC…');
+      try{
+        const r = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${encodeURIComponent(vin)}?format=json`);
+        const j = await r.json();
+        const row = j?.Results?.[0] || {};
+        dec = { ok:true, vehicle:{ year: row.ModelYear||null, make: row.Make||null, model: row.Model||null, bodyClass: row.BodyClass||null }, counts:{recalls:0, complaints:0, tsbs:0}, topRisks:[] };
+        setStatus('VPIC decode OK (fallback).');
+      }catch(e2){
+        console.error('Both server and VPIC failed', e, e2);
+        alert('Lookup failed (server & VPIC). Check network.');
+        setStatus('Lookup failed.');
+        return;
+      }
+    }
+
+    window.vehicle = dec.vehicle || {};
+    const t = `${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}${miles?(' • '+miles.toLocaleString()+' mi'):''}`.trim();
+    const banner = document.getElementById('vehicleBanner');
+    if (banner){ banner.innerHTML = `<strong>${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}</strong>${vehicle.bodyClass?(' · '+vehicle.bodyClass):''}${miles?(' · '+miles.toLocaleString()+' mi'):''}`; }
+    const chip = document.getElementById('sVehicle'); if(chip) chip.textContent = t;
+
+    // Render risks if present
+    if (typeof renderEvidence === 'function'){ renderEvidence(dec); }
+
+    // Fetch maintenance stub (non-blocking)
+    try {
+      const m = await fetch(`/api/maintenance/${vin}`).then(r=>r.json());
+      document.getElementById('intervals') && (document.getElementById('intervals').innerHTML = Object.entries(m.intervals||{}).map(([k,v])=>`<li><strong>${k}</strong>: ${v}</li>`).join(''));
+    } catch(e){ console.warn('Maintenance fetch failed', e); }
+
+    // Reveal steps
+    document.getElementById('step2') && (document.getElementById('step2').style.display='block');
+    document.getElementById('step3') && (document.getElementById('step3').style.display='block');
+    document.getElementById('step4') && (document.getElementById('step4').style.display='block');
+    setStatus('Lookup complete.');
+
+    if (typeof refreshOffer === 'function') refreshOffer();
+  }catch(e){
+    console.error('Lookup error:', e);
+    alert('Lookup failed: '+ (e && e.message ? e.message : e));
+    setStatus('Lookup failed.');
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = 'Lookup'; }
+  }
+}
+
+// Re-bind for safety
+document.addEventListener('DOMContentLoaded', ()=>{
+  const b = document.getElementById('btnLookup');
+  if (b) b.addEventListener('click', (ev)=>{ ev.preventDefault(); try{ lookupVIN(); }catch(e){ console.error(e); } });
+});
     const res = await fetch('/api/evidence/score', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ vin })
@@ -1259,6 +1329,8 @@ function initApp(){
 document.addEventListener('DOMContentLoaded', initApp);
 window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled rejection', e.reason); alert('Error: '+(e.reason&&e.reason.message?e.reason.message:e.reason)); });
 
+
+function setStatus(msg){ const el=document.getElementById('statusLine'); if(el) el.textContent = msg||''; }
 </script>
 </body>
 </html>
