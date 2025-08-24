@@ -1,24 +1,6 @@
 {
-  "laborRate": 120,
-  "partsMultiplier": 1.0,
   "desiredProfit": 2000,
-  "daysToTurn": 30,
-  "floorplanAPR": 0.1,
-  "avgTransport": 150,
-  "marketingFees": 85,
-  "warrantyReserve": 0,
-  "riskWeights": {
-    "Engine / Oil consumption": 100,
-    "Transmission": 120,
-    "Electrical": 60,
-    "Brakes": 50,
-    "HVAC / A/C": 40,
-    "Airbags / SRS": 80,
-    "Steering": 70,
-    "Suspension": 70,
-    "Fuel system": 70,
-    "Paint / Exterior": 30
-  },
-  "riskReserveCapPct": 0.15,
-  "allowSerpAPI": false
+  "riskReservePerRecall": 80,
+  "holdingPercent": 0.02,
+  "docFee": 200
 }

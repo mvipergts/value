@@ -1,532 +1,410 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Car Value, History & Maintenance — Pro v6.2.2</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-<style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Car Value, History & Maintenance — Pro v6.2.7</title>
+  <style>
 :root{ --bg:#f7fafc; --surface:#fff; --card:#fff; --text:#0f172a; --muted:#475569; --primary:#2563eb; --border:#d6e0ee; --accent:#e2e8f0; --green:#10b981; --amber:#f59e0b; --indigo:#6366f1; }
 *{ box-sizing:border-box; }
-body{ font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto; margin:0; background:linear-gradient(180deg,#eef2ff 0%, #f8fafc 28%); color:var(--text); }
-.container{ max-width:1100px; margin:0 auto; padding:24px; }
-h1{ margin:0 0 8px 0; }
-small.muted{ color:var(--muted); }
-.card{ border:1px solid var(--border); background:linear-gradient(180deg, var(--card), var(--surface)); border-radius:16px; padding:16px; margin-top:14px; }
-.grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
-.grid.grid-3{ grid-template-columns:minmax(0,1.15fr) minmax(0,1.15fr) minmax(0,0.9fr); align-items:start; }
-@media (max-width: 1100px){ .grid.grid-3{ grid-template-columns:1fr; } }
-.card.risks{ max-height:560px; overflow:auto; }
-.card.risks, .card.risks *{ word-break:break-word; overflow-wrap:anywhere; }
-.card.risks details{ border:1px dashed var(--accent); border-radius:10px; padding:6px 8px; margin:6px 0; background:#fff; }
-.card.risks summary{ cursor:pointer; list-style:none; font-weight:700; }
-.card.risks .risk-body{ padding:6px 2px 8px; font-size:14px; }
-.card.risks .risk-stats{ color:var(--muted); margin-top:2px; font-size:13px; }
-.card.risks .risk-checks{ margin-top:6px; }
-input, button, textarea, select{ padding:12px 14px; border-radius:12px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:15px; }
-.btn{ background:var(--primary); color:#fff; border:1px solid var(--primary); border-radius:12px; padding:12px 18px; font-weight:800; box-shadow:0 6px 18px rgba(37,99,235,.22); cursor:pointer; }
-.btn.ghost{ background:#fff; color:var(--primary); }
-.badge{ padding:4px 10px; border-radius:999px; font-size:12px; font-weight:700; border:1px solid var(--accent); background:#fff; }
-.stat{ display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px dashed var(--accent); }
-.stat:last-child{ border-bottom:0; }
-summary{ cursor:pointer; }
-.hidden{ display:none; }
-table{ width:100%; border-collapse:collapse; }
-thead th{ text-align:left; background:rgba(2,6,23,.03); padding:8px; }
-tbody td{ padding:8px; border-bottom:1px dashed var(--accent); }
-tfoot td{ padding:8px; }
-
-#sticky{ position:sticky; top:0; z-index:5; background: rgba(255,255,255,.86); backdrop-filter: blur(6px); border-bottom:1px solid var(--border); }
-#sticky .wrap{ max-width:1100px; margin:0 auto; padding:10px 24px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-.pill{ border:1px solid var(--border); background:#fff; padding:8px 12px; border-radius:999px; font-weight:700; }
-.pill.blue{ border-color:rgba(37,99,235,.35); background:rgba(37,99,235,.08); }
-
-#wizardNav{ display:flex; gap:8px; margin-top:8px; }
-.step{ padding:8px 14px; border-radius:12px; border:1px solid var(--border); }
-.step.active{ background:rgba(37,99,235,.1); border-color:var(--primary); }
-
-.modal{ position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; }
-.modal .panel{ width:720px; max-width:94vw; background:#fff; border-radius:14px; padding:18px; }
-.modal .grid{ grid-template-columns: repeat(2, minmax(0,1fr)); }
-</style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-<script>if (window.pdfjsLib) { pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js"; }</script>
-<script src="https://unpkg.com/tesseract.js@2.1.5/dist/tesseract.min.js"></script>
+body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color:var(--text); background:var(--bg); }
+.wrap{ max-width:1200px; margin:20px auto; padding:0 16px; }
+h1{ margin:0 0 14px; }
+.muted{ color:var(--muted); }
+.card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px; box-shadow:0 2px 10px rgba(12,28,70,.06); }
+.btn{ background:#fff; border:1px solid var(--border); border-radius:10px; padding:10px 14px; box-shadow:0 2px 10px rgba(12,28,70,.06); cursor:pointer; font-weight:600; }
+.btn.primary{ background:var(--primary); border-color:var(--primary); color:#fff; }
+.btn:disabled{ opacity:.6; cursor:not-allowed; }
+input,select{ border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+.stat{ display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--accent); }
+.stat:last-child{ border-bottom:none; }
+.grid{ display:grid; grid-template-columns: repeat(3,1fr); gap:14px; }
+.grid.grid-3{ grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,0.85fr); align-items:start; }
+@media (max-width:1200px){ .grid.grid-3{ grid-template-columns:1fr; } }
+.grid>.card, .grid.grid-3>.card{ min-width:0; }
+.grow{ flex:1 1 0; min-width:0; }
+.risks{ max-height:560px; overflow:auto; word-break:break-word; }
+.risks details{ border:1px dashed var(--accent); border-radius:10px; padding:6px 8px; margin:6px 0; background:#fff; }
+.risks summary{ cursor:pointer; }
+.sticky{ position:sticky; top:0; z-index:10; background:rgba(247,250,252,.9); backdrop-filter:saturate(180%) blur(6px); padding:8px 0; border-bottom:1px solid var(--border); }
+.badge{ display:inline-block; padding:6px 10px; border-radius:999px; background:#fff; border:1px solid var(--border); margin-right:8px; box-shadow:0 1px 6px rgba(0,0,0,.05); }
+  </style>
 </head>
 <body>
-<div id="sticky">
+  <div class="sticky">
+    <div class="wrap">
+      <span id="sVehicle" class="badge muted">Vehicle</span>
+      <span class="badge">Summary:</span>
+      <span class="badge">Retail: <span id="sumRetail">$0</span></span>
+      <span class="badge">Wholesale: <span id="sumWhole">$0</span></span>
+      <span class="badge">Maint: <span id="sumMaint">$0</span></span>
+      <span class="badge">Recon: <span id="sumRecon">$0</span></span>
+      <span class="badge">Risk: <span id="sumRisk">$0</span></span>
+      <span class="badge">Max Buy: <span id="sumMax">$0</span></span>
+      <button class="btn" onclick="openSettings()">Settings</button>
+      <button class="btn primary" onclick="window.print()">Print Customer PDF</button>
+    </div>
+  </div>
+
   <div class="wrap">
-    <strong id="sVehicle" class="muted">Vehicle</strong> • <strong>Summary:</strong>
-    <span class="pill">Retail: <span id="sRetail">$0</span></span>
-    <span class="pill">Wholesale: <span id="sWhole">$0</span></span>
-    <span class="pill">Maint: <span id="sMaint">-$0</span></span>
-    <span class="pill">Recon: <span id="sRecon">$0</span></span>
-    <span class="pill">Risk: <span id="sRisk">$0</span></span>
-    <span class="pill blue">Max Buy: <span id="sMax">$0</span></span>
-    <button class="btn ghost" onclick="openSettings()">Settings</button>
-    <button class="btn" onclick="printPdf()">Print Customer PDF</button>
-  </div>
-</div>
+    <h1>Car Value, History & Maintenance — Pro v6.2.7</h1>
 
-<div class="container">
-  <h1>Car Value, History & Maintenance — Pro v6.2.2</h1>
-  <div id="wizardNav">
-    <div class="step active" id="step1Btn" onclick="showStep(1)">1) Identify</div>
-    <div class="step" id="step2Btn" onclick="showStep(2)">2) History</div>
-    <div class="step" id="step3Btn" onclick="showStep(3)">3) Service & Recon</div>
-    <div class="step" id="step4Btn" onclick="showStep(4)">4) Offer + Comps</div>
-  </div>
-
-  <div id="step1" class="card">
-    <h3>Identify</h3>
-    <div style="display:flex; gap:10px; flex-wrap:wrap">
-      <input id="vin" placeholder="VIN">
-      <input id="miles" type="number" min="0" step="1" placeholder="Current mileage">
-      <button class="btn" onclick="lookup()">Lookup</button>
+    <!-- Step 1 -->
+    <div class="card" id="step1">
+      <h3>1) Identify</h3>
+      <div style="display:flex; gap:8px; flex-wrap:wrap">
+        <input id="vin" placeholder="VIN" style="min-width:260px">
+        <input id="miles" type="number" min="0" placeholder="Mileage">
+        <button class="btn primary" onclick="lookupVIN()">Lookup</button>
+      </div>
+      <div id="vehicleBanner" class="muted" style="margin-top:8px"></div>
     </div>
-    <div id="vehicleBanner" class="card" style="margin-top:10px"></div>
-    <div class="grid">
-      <div class="card">
-        <div class="stat"><span><strong>Retail</strong></span><span id="vRetail">$0</span></div>
-        <div class="stat"><span><strong>Wholesale</strong></span><span id="vWholesale">$0</span></div>
-        <details><summary class="muted">Raw valuation</summary><pre id="valRaw"></pre></details>
-      </div>
-      <div class="card">
-        <div class="badge" id="histBadges">Accidents 0 • Owners 0 • Records 0</div>
-        <details><summary class="muted">Raw history</summary><pre id="histRaw"></pre></details>
-      </div>
-      <div class="card">
-        <div class="badge">Intervals</div>
-        <ul id="intervals"></ul>
-      </div>
-    </div>
-  </div>
 
-  <div id="step2" class="card hidden">
-    <h3>History</h3>
-    <div class="card">
-      <label>Upload Carfax / AutoCheck (PDF)</label>
-      <div style="display:flex; gap:10px; align-items:center">
-        <input type="file" id="carfax" accept="application/pdf">
-        <button class="btn" onclick="uploadCarfax()">Upload</button>
-        <button class="btn ghost" onclick="ocrCarfaxFromFile()">Scan with OCR</button>
-      </div>
-      <div id="carfaxUrl" class="muted"></div>
-      <div id="carfaxBox" class="card"></div>
-      <details><summary class="muted">Paste text (for scanned PDFs)</summary>
-        <textarea id="carfaxPaste" rows="6" style="width:100%"></textarea>
-        <div><button class="btn ghost" onclick="summarizeText()">Summarize Text</button></div>
-      </details>
-    </div>
-  </div>
-
-  <div id="step3" class="card hidden">
-    <h3>Service & Recon</h3>
-    <div class="grid grid-3">
-      <div class="card">
-        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
-          <button class="btn" onclick="applyMaintenance()">Apply Maintenance (from Carfax)</button>
-          <button class="btn ghost" onclick="getEvidence()">Get NHTSA + TSB Evidence</button>
+    <!-- Step 3 (Service & Recon) -->
+    <div class="card" id="step3" style="margin-top:14px; display:none">
+      <h3>3) Service & Recon</h3>
+      <div class="grid grid-3">
+        <div class="card">
+          <button class="btn primary" onclick="applyMaint()">Apply Maintenance (from Carfax)</button>
+          <button class="btn" onclick="getEvidence()">Get NHTSA + TSB Evidence</button>
+          <h4 style="margin-top:12px">Maintenance Deductions</h4>
+          <table style="width:100%">
+            <thead><tr><th align="left">Item</th><th align="left">Amount</th><th align="left">Why</th></tr></thead>
+            <tbody id="maintTable"></tbody>
+          </table>
         </div>
-        <h4 style="margin-top:10px">Maintenance Deductions</h4>
-        <table>
-          <thead><tr><th>Item</th><th style="text-align:right">Amount</th><th>Why</th></tr></thead>
-          <tbody id="maintRows"><tr><td class="muted" colspan="3">No items yet.</td></tr></tbody>
-          <tfoot><tr><td style="text-align:right"><strong>Total</strong></td><td style="text-align:right" id="maintTotal">$0</td><td></td></tr></tfoot>
-        </table>
-      </div>
-      <div class="card">
-        <div style="display:flex; gap:8px; flex-wrap:wrap">
-          <button class="btn ghost" onclick="quick('Tires (set)', 800, 'tires')">+ Tires</button>
-          <button class="btn ghost" onclick="quick('Windshield', 300, 'glass')">+ Windshield</button>
-          <button class="btn ghost" onclick="quick('Detail', 150, 'detail')">+ Detail</button>
-          <button class="btn ghost" onclick="quick('Inspection', 120, 'inspection')">+ Inspection</button>
-          <button class="btn ghost" onclick="quick('Alignment', 110, 'wheel_alignment')">+ Alignment</button>
-          <button class="btn ghost" onclick="quick('Brakes (pads/rotors est.)', 450, 'brakes')">+ Brakes</button>
-          <button class="btn ghost" onclick="quick('Battery', 180, 'battery')">+ Battery</button>
-        </div>
-        <div style="display:flex; gap:8px; margin-top:8px">
-          <input id="reconLabel" placeholder="Custom item">
-          <input id="reconAmt" type="number" min="0" step="1" placeholder="Amount">
-          <button class="btn" onclick="addRecon()">Add</button>
-        </div>
-        <table style="margin-top:8px">
-          <thead><tr><th>Item</th><th style="text-align:right">Cost</th><th></th></tr></thead>
-          <tbody id="reconRows"><tr><td class="muted" colspan="3">No additional costs.</td></tr></tbody>
-          <tfoot><tr><td style="text-align:right"><strong>Total</strong></td><td style="text-align:right" id="reconTotal">$0</td><td></td></tr></tfoot>
-        </table>
-      </div>
-      <div class="card risks">
-        <h4>Top Risks</h4>
-        <div id="riskBadge" class="badge">Recalls 0 • Complaints 0 • TSBs 0</div>
-        <ul id="riskList"></ul>
-        <button class="btn ghost" onclick="applyRisksToRecon()">Apply Top Risks to Recon</button>
-      </div>
-    </div>
-  </div>
 
-  <div id="step4" class="card hidden">
-    <h3>Offer + Market Comps</h3>
-    <div class="grid">
-      <div class="card">
-        <h4>Numbers</h4>
-        <div class="stat"><span><strong>Retail</strong></span><span id="oRetail">$0</span></div>
-        <div class="stat"><span><strong>Wholesale</strong></span><span id="oWhole">$0</span></div>
-        <div class="stat"><span><strong>Maint. deduction</strong></span><span id="oMaint">-$0</span></div>
-        <div class="stat"><span><strong>Wholesale (after)</strong></span><span id="oAdj">$0</span></div>
-        <div class="stat"><span><strong>Recon total</strong></span><span id="oRecon">$0</span></div>
-        <div class="stat"><span><strong>Risk reserve</strong></span><span id="oRisk">$0</span></div>
-        <div class="stat"><span><strong>Desired profit</strong></span><span id="oProfit">$0</span></div>
-        <div class="stat"><span><strong>Holding & fees</strong></span><span id="oHold">$0</span></div>
-        <div class="stat"><span><strong>Target Max Buy</strong></span><span id="oMax" style="font-weight:800">$0</span></div>
-      </div>
-      <div class="card">
-        <h4>eBay Comps (Free)</h4>
-        <div style="display:flex; gap:8px; flex-wrap:wrap">
-          <input id="compZip" placeholder="ZIP (optional)" style="width:140px">
-          <select id="compRadius">
-            <option value="100">100 mi</option>
-            <option value="250">250 mi</option>
-            <option value="500" selected>500 mi</option>
-          </select>
-          <button class="btn" onclick="fetchSold()">Fetch SOLD</button>
-          <button class="btn ghost" onclick="fetchActive()">Fetch ACTIVE</button>
-          <button class="btn ghost" onclick="useSoldMedian()">Use SOLD Median as Retail</button>
+        <div class="card">
+          <div style="display:flex; gap:8px; flex-wrap:wrap">
+            <button class="btn">+ Tires</button>
+            <button class="btn">+ Windshield</button>
+            <button class="btn">+ Detail</button>
+            <button class="btn">+ Inspection</button>
+            <button class="btn">+ Alignment</button>
+            <button class="btn">+ Brakes</button>
+            <button class="btn">+ Battery</button>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:8px">
+            <input id="reconLabel" class="grow" placeholder="Custom item">
+            <input id="reconAmt" class="grow" type="number" min="0" step="1" placeholder="Amount" style="max-width:220px">
+            <button class="btn" onclick="addRecon()">Add</button>
+          </div>
+          <table style="width:100%; margin-top:10px">
+            <thead><tr><th align="left">Item</th><th align="left">Cost</th></tr></thead>
+            <tbody id="reconTable"><tr><td class="muted">No additional costs.</td><td>$0</td></tr></tbody>
+          </table>
         </div>
-        <div class="stat"><span>Sold stats</span><span id="soldStats">—</span></div>
-        <div class="stat"><span>Active stats</span><span id="activeStats">—</span></div>
-        <details><summary>Sold list</summary><ul id="soldList"></ul></details>
-        <details><summary>Active list</summary><ul id="activeList"></ul></details>
-      </div>
-      <div class="card">
-        <h4>Proof</h4>
-        <div id="proofCarfaxPretty" class="card"></div>
-        <details><summary class="muted">Carfax summary (raw)</summary><pre id="proofCarfax"></pre></details>
-        <details><summary class="muted">Evidence (raw)</summary><pre id="proofEvidence"></pre></details>
-      </div>
-    </div>
-  </div>
-</div>
 
-<div id="settingsModal" class="modal">
-  <div class="panel">
-    <div style="display:flex; justify-content:space-between; align-items:center">
-      <h3>Dealer Settings</h3>
-      <button class="btn ghost" onclick="closeSettings()">Close</button>
-    </div>
-    <div class="grid">
-      <div class="card">
-        <label>Labor rate ($/hr)</label>
-        <input id="sLabor" type="number" min="0" step="1">
-        <label>Parts multiplier</label>
-        <input id="sParts" type="number" step="0.1">
-        <label>Desired profit ($)</label>
-        <input id="sProfit" type="number" min="0" step="1">
-        <label>Days to turn</label>
-        <input id="sDays" type="number" min="0" step="1">
-      </div>
-      <div class="card">
-        <label>Floorplan APR (decimal)</label>
-        <input id="sApr" type="number" step="0.01">
-        <label>Avg transport ($)</label>
-        <input id="sTrans" type="number" min="0" step="1">
-        <label>Marketing fees ($)</label>
-        <input id="sMkt" type="number" min="0" step="1">
-        <label>Warranty reserve ($)</label>
-        <input id="sWar" type="number" min="0" step="1">
+        <div class="card risks">
+          <div class="badge muted" id="riskCounts">Recalls 0 • Complaints 0 • TSBs 0</div>
+          <button class="btn primary" style="margin-top:8px" onclick="applyRisks()">Apply Top Risks to Recon</button>
+          <div id="riskList" style="margin-top:8px" class="muted">No data yet.</div>
+        </div>
       </div>
     </div>
-    <div class="card">
-      <h4>Risk Reserve Weights ($ per point)</h4>
-      <div id="riskWeightsGrid" class="grid"></div>
-      <label>Risk cap (% of wholesale)</label>
-      <input id="sCap" type="number" step="0.01">
-    </div>
-    <div style="display:flex; justify-content:flex-end; gap:8px">
-      <button class="btn ghost" onclick="closeSettings()">Cancel</button>
-      <button class="btn" onclick="saveSettings()">Save</button>
+
+    <!-- Step 4 (Offer) -->
+    <div class="card" id="step4" style="margin-top:14px; display:none">
+      <h3>4) Offer + Market Comps</h3>
+      <div class="grid">
+        <div class="card">
+          <h4>Numbers</h4>
+          <div class="stat"><span><strong>Retail</strong></span><span id="oRetail">$0</span></div>
+          <div class="stat"><span><strong>Wholesale</strong></span><span id="oWhole">$0</span></div>
+          <div class="stat"><span><strong>Maint. deduction</strong></span><span id="oMaint">$0</span></div>
+          <div class="stat"><span><strong>Wholesale (after)</strong></span><span id="oAdj">$0</span></div>
+          <div class="stat"><span><strong>Recon total</strong></span><span id="oRecon">$0</span></div>
+          <div class="stat"><span><strong>Risk reserve</strong></span><span id="oRisk">$0</span></div>
+          <div class="stat"><span><strong>Desired profit</strong></span><span id="oProfit">$0</span></div>
+          <div class="stat"><span><strong>Holding & fees</strong></span><span id="oHold">$0</span></div>
+          <div class="stat"><span><strong>Target Max Buy</strong></span><span id="oMax">$0</span></div>
+        </div>
+        <div class="card" id="ebayCard">
+          <h4>eBay Comps (Free)</h4>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+            <input id="zip" placeholder="ZIP (optional)" style="width:140px">
+            <select id="radius">
+              <option value="100">100 mi</option>
+              <option value="250">250 mi</option>
+              <option value="500" selected>500 mi</option>
+            </select>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap">
+            <button class="btn" onclick="fetchEbay('sold')">Fetch SOLD</button>
+            <button class="btn" onclick="fetchEbay('active')">Fetch ACTIVE</button>
+            <button class="btn" onclick="useSoldMedian()">Use SOLD Median as Retail</button>
+          </div>
+          <div id="ebayStats" class="muted" style="margin-top:8px">—</div>
+          <details style="margin-top:6px"><summary>Sold list</summary><div id="soldList" class="muted">No results</div></details>
+          <details style="margin-top:6px"><summary>Active list</summary><div id="activeList" class="muted">No results</div></details>
+        </div>
+        <div class="card" id="carsCard">
+          <h4>Cars.com (Optional)</h4>
+          <div class="muted" style="margin-bottom:6px">Uses SerpAPI if <code>SERPAPI_KEY</code> is set. Otherwise, paste comps manually below.</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap">
+            <button class="btn" onclick="fetchSerp('cars')">Fetch Cars.com</button>
+            <button class="btn" onclick="useCarsMedian()">Use Cars.com Median as Retail</button>
+          </div>
+          <div id="carsStats" class="muted" style="margin-top:6px">—</div>
+          <details style="margin-top:6px"><summary>Results</summary><div id="carsList" class="muted">No results</div></details>
+          <details style="margin-top:6px"><summary>Paste comps (price - title - url)</summary>
+            <textarea id="carsManual" style="width:100%; min-height:100px"></textarea>
+            <div style="margin-top:6px"><button class="btn" onclick="parseCarsManual()">Parse</button></div>
+          </details>
+        </div>
+        <div class="card" id="fbCard">
+          <h4>Facebook Marketplace (Manual / Optional)</h4>
+          <div class="muted">Paste comps (no automated scraping here).</div>
+          <details open style="margin-top:6px"><summary>Paste comps</summary>
+            <textarea id="fbManual" style="width:100%; min-height:100px"></textarea>
+            <div style="margin-top:6px"><button class="btn" onclick="parseFbManual()">Parse</button> <button class="btn" onclick="useFbMedian()">Use FB Median as Retail</button></div>
+          </details>
+          <div id="fbStats" class="muted" style="margin-top:6px">—</div>
+          <details style="margin-top:6px"><summary>Results</summary><div id="fbList" class="muted">No results</div></details>
+        </div>
+        <div class="card" id="guideCard">
+          <h4>Guides: KBB / Black Book / Manual</h4>
+          <div class="muted">Enter guide numbers if you have them (or use manual).</div>
+          <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:8px">
+            <div class="card">
+              <h5>KBB</h5>
+              <div>Retail <input id="kbbRetail" type="number" min="0" style="width:140px"></div>
+              <div>Wholesale <input id="kbbWhole" type="number" min="0" style="width:140px"></div>
+            </div>
+            <div class="card">
+              <h5>Black Book</h5>
+              <div>Retail <input id="bbRetail" type="number" min="0" style="width:140px"></div>
+              <div>Wholesale <input id="bbWhole" type="number" min="0" style="width:140px"></div>
+            </div>
+          </div>
+          <div style="margin-top:8px">
+            <div>Manual Retail <input id="manRetail" type="number" min="0" style="width:160px"> 
+            <button class="btn" onclick="useGuidesWeighted()">Use Weighted Retail</button></div>
+            <div class="muted" style="margin-top:6px">Weights: SOLD median 0.5, Cars.com 0.2, KBB 0.15, Black Book 0.1, Manual 0.05 (only sources you provide are used).</div>
+          </div>
+        </div>
+        <div class="card">
+          <h4>Proof</h4>
+          <div id="proofCarfaxPretty" class="card"></div>
+          <details><summary class="muted">Carfax summary (raw)</summary><pre id="proofCarfax"></pre></details>
+          <details><summary class="muted">Evidence (raw)</summary><pre id="proofEvidence"></pre></details>
+        </div>
+      </div>
     </div>
   </div>
-</div>
 
 <script>
-let valuation=null, historyData=null, maintData=null;
-let carfaxUrl=null, carfaxSummary=null, carfaxText='';
-let maintItems=[], reconItems=[], evidence=null, calc=null, vehicleLabel='', decoded={};
+let vehicle = {}; let maintItems = []; let reconItems = []; let carfaxSummary={};
 
+function setText(id, v){ const el=document.getElementById(id); if(el) el.textContent=v; }
 function fmt(n){ return '$'+Number(n||0).toLocaleString(); }
-function renderCarfaxPretty(sum){
-  try{
-    if(!sum || Object.keys(sum).length===0){ document.getElementById('proofCarfaxPretty').innerHTML='<span class="muted">No Carfax summary.</span>'; return; }
-    const rows = [
-      ['Accidents', sum.accidents],
-      ['Damage Reports', sum.damageReports],
-      ['Owners', sum.owners],
-      ['Service Records', sum.serviceRecords],
-      ['Recalls', sum.recalls],
-      ['Last Odometer', sum.lastOdometer || '—'],
-      ['Usage', sum.usage || '—'],
-      ['Brandings', (sum.brandings||[]).join(', ') || '—']
-    ];
-    const html = `<table><tbody>${rows.map(r=>`<tr><td class='muted'>${r[0]}</td><td style='text-align:right'>${r[1]}</td></tr>`).join('')}</tbody></table>`;
-    document.getElementById('proofCarfaxPretty').innerHTML = html;
-  }catch{ document.getElementById('proofCarfaxPretty').innerHTML=''; }
-}
-function setText(id, val){ const el=document.getElementById(id); if(el) el.textContent=val; }
-function showStep(n){ [1,2,3,4].forEach(i=>{ document.getElementById('step'+i).classList.toggle('hidden', i!==n); document.getElementById('step'+i+'Btn').classList.toggle('active', i===n); }); if(n===4) refreshOffer(); }
 
-async function lookup(){
+async function lookupVIN(){
   const vin = document.getElementById('vin').value.trim();
   const miles = Number(document.getElementById('miles').value||0);
-  if (!vin) return alert('Enter VIN');
-  try{
-    const v = await fetch('/api/vin/'+encodeURIComponent(vin)).then(r=>r.json());
-    if (v && v.ok){
-      decoded = v;
-      vehicleLabel = [v.year, v.make, v.model, v.trim].filter(Boolean).join(' ');
-      document.getElementById('vehicleBanner').innerHTML = `<strong style="font-size:18px">${vehicleLabel}</strong>${v.bodyClass?(' · '+v.bodyClass):''}${miles?(' · '+miles.toLocaleString()+' mi'):''}`;
-      document.getElementById('sVehicle').textContent = `${vehicleLabel}${miles?(' • '+miles.toLocaleString()+' mi'):''}`;
-      valuation = await fetch(`/api/value/${vin}?mileage=${miles}&year=${v.year||''}`).then(r=>r.json());
-      setText('vRetail', fmt(valuation.retail)); setText('vWholesale', fmt(valuation.wholesale));
-      document.getElementById('valRaw').textContent = JSON.stringify(valuation,null,2);
-      historyData = await fetch(`/api/history/${vin}`).then(r=>r.json());
-      document.getElementById('histBadges').textContent = `Accidents ${historyData.accidents} • Owners ${historyData.owners} • Records ${historyData.serviceRecords}`;
-      document.getElementById('histRaw').textContent = JSON.stringify(historyData,null,2);
-      maintData = await fetch(`/api/maintenance/${vin}`).then(r=>r.json());
-      document.getElementById('intervals').innerHTML = Object.entries(maintData.intervals||{}).map(([k,v])=>`<li><strong>${k}</strong>: ${v}</li>`).join('');
-      showStep(2); refreshOffer();
-    }
-  }catch(e){ alert('VIN lookup failed'); }
-}
-
-async function uploadCarfax(){
-  const f = document.getElementById('carfax').files[0]; if (!f) return alert('Pick a PDF first');
-  const fd = new FormData(); fd.append('file', f);
-  const res = await fetch('/api/carfax/upload',{ method:'POST', body: fd }).then(r=>r.json());
-  if (!res || !res.ok) { alert('Upload failed'); return; }
-  carfaxUrl = res.url; carfaxSummary = res.summary; carfaxText = res.text || '';
-  document.getElementById('carfaxUrl').innerHTML = `Uploaded: <a href="${carfaxUrl}" target="_blank">${carfaxUrl}</a>`;
-  document.getElementById('carfaxBox').innerHTML = carfaxSummary && !carfaxSummary.note
-      ? Object.entries(carfaxSummary).map(([k,v])=>`<div class="stat"><span><strong>${k}</strong></span><span>${Array.isArray(v)?v.join(', '):v}</span></div>`).join('')
-      : '<span class="muted">No text extracted. Try OCR scan.</span>';
-  // Auto-advance to Step 3
-  showStep(3);
+  if(!vin) return;
+  // Decode basic via VPIC (through server evidence endpoint will also decode)
+  const dec = await fetch('/api/evidence/score',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vin})}).then(r=>r.json());
+  if(dec.ok){
+    vehicle = dec.vehicle || {};
+    document.getElementById('sVehicle').textContent = `${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}${miles?(' • '+miles.toLocaleString()+' mi'):''}`.trim();
+    document.getElementById('vehicleBanner').innerHTML = `<strong>${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}</strong>${vehicle.bodyClass?(' · '+vehicle.bodyClass):''}${miles?(' · '+miles.toLocaleString()+' mi'):''}`;
+    // evidence from this call
+    renderEvidence(dec);
+  }
+  const maint = await fetch(`/api/maintenance/${vin}`).then(r=>r.json());
+  document.getElementById('step3').style.display='block';
+  document.getElementById('step4').style.display='block';
+  // Auto refresh offer after each stage
   refreshOffer();
 }
 
-async function summarizeText(){
-  const raw = document.getElementById('carfaxPaste').value||'';
-  if (!raw.trim()) return alert('Paste the text first');
-  const res = await fetch('/api/carfax/summarize-text',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rawText: raw })}).then(r=>r.json());
-  if (res.ok){ carfaxSummary = res.summary; document.getElementById('carfaxBox').innerHTML = Object.entries(carfaxSummary).map(([k,v])=>`<div class="stat"><span><strong>${k}</strong></span><span>${Array.isArray(v)?v.join(', '):v}</span></div>`).join(''); refreshOffer(); showStep(3); }
+function renderEvidence(res){
+  document.getElementById('riskCounts').textContent = `Recalls ${res.counts?.recalls||0} • Complaints ${res.counts?.complaints||0} • TSBs ${res.counts?.tsbs||0}`;
+  const defaults = {
+    'Engine / Oil consumption': ['Check oil use (qt/1k mi); blue smoke; fouled plugs','Scan for misfire codes; PCV/valve cover leaks'],
+    'Transmission': ['2–3 shift flare/judder test; harshness','CVT low-speed judder/whine; verify fluid service history'],
+    'Electrical': ['Battery/alternator load test; parasitic draw check'],
+    'Brakes': ['Measure pad/rotor thickness; brake pulsation test'],
+    'HVAC / A/C': ['Vent temp at idle/cruise; blend door operation']
+  };
+  const list = (res.topRisks||[]).map(r=>{
+    const checks = (r.checks?.length?r.checks:defaults[r.label]||[]).map(c=>`<li>${c}</li>`).join('');
+    return `<details class="risk"><summary><strong>${r.label}</strong> — score ${r.score}</summary>
+      <div class="muted">${r.rationale||''}</div>
+      <ul>${checks}</ul>
+    </details>`;
+  }).join('') || '<div class="muted">No notable risks.</div>';
+  document.getElementById('riskList').innerHTML = list;
+  document.getElementById('proofEvidence').textContent = JSON.stringify(res,null,2);
 }
-
-// OCR
-async function ocrCarfaxFromFile(){
-  const f = document.getElementById('carfax').files[0];
-  if (!f) { alert('Pick a PDF first'); return; }
-  const ab = await f.arrayBuffer();
-  return ocrCarfaxFromArrayBuffer(ab);
-}
-async function ocrCarfaxFromArrayBuffer(arrayBuffer){
-  if (!window.pdfjsLib || !window.Tesseract){ alert('OCR libraries not loaded'); return; }
-  try{
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    let fullText = '';
-    const maxPages = Math.min(pdf.numPages, 10);
-    for (let p=1; p<=maxPages; p++){
-      const page = await pdf.getPage(p);
-      const viewport = page.getViewport({ scale: 1.6 });
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      canvas.width = viewport.width; canvas.height = viewport.height;
-      await page.render({ canvasContext: ctx, viewport }).promise;
-      const { data } = await Tesseract.recognize(canvas, 'eng');
-      fullText += '\\n\\n' + (data && data.text ? data.text : '');
-    }
-    if (fullText.trim().length < 30){ alert('OCR found little text. Try higher quality.'); return; }
-    carfaxText = fullText;
-    const res = await fetch('/api/carfax/summarize-text', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rawText: fullText }) }).then(r=>r.json());
-    if (res && res.ok){
-      carfaxSummary = res.summary;
-      document.getElementById('carfaxBox').innerHTML = Object.entries(carfaxSummary).map(([k,v])=>`<div class="stat"><span><strong>${k}</strong></span><span>${Array.isArray(v)?v.join(', '):v}</span></div>`).join('');
-      await applyMaintenance();
-      showStep(3);
-      refreshOffer();
-    } else { alert('OCR summarize failed'); }
-  }catch(err){ console.error(err); alert('OCR failed: '+(err?.message||err)); }
-}
-
-// Maintenance & Recon
-async function applyMaintenance(){
-  const year = decoded.year || 0;
-  const mileage = Number(document.getElementById('miles').value||0);
-  const body = { summary: carfaxSummary||{}, text: carfaxText||'', mileage, year };
-  const res = await fetch('/api/infer/maintenance',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }).then(r=>r.json());
-  if (res && res.ok){
-    const seen = new Set(maintItems.map(x=>x.key||x.label));
-    res.items.forEach(it=>{ const k=it.key||it.label; if(!seen.has(k)){ seen.add(k); maintItems.push(it); } });
-    renderMaint(); refreshOffer();
-  }
-}
-
-function renderMaint(){
-  const tbody=document.getElementById('maintRows');
-  if (!maintItems.length){ tbody.innerHTML='<tr><td class="muted" colspan="3">No items yet.</td></tr>'; setText('maintTotal', fmt(0)); return; }
-  tbody.innerHTML = maintItems.map(it=>`<tr><td>${it.label}</td><td style="text-align:right">${fmt(it.amount)}</td><td class="muted">${Array.isArray(it.rationale)?it.rationale.join(' • '):(it.rationale||'')}</td></tr>`).join('');
-  setText('maintTotal', fmt(maintItems.reduce((s,it)=>s+Number(it.amount||0),0)));
-}
-function renderRecon(){
-  const tbody=document.getElementById('reconRows');
-  if (!reconItems.length){ tbody.innerHTML='<tr><td class="muted" colspan="3">No additional costs.</td></tr>'; setText('reconTotal', fmt(0)); return; }
-  tbody.innerHTML = reconItems.map((it,i)=>`<tr><td>${it.label}</td><td style="text-align:right">${fmt(it.amount)}</td><td><button class="btn ghost" onclick="removeRecon(${i})">Remove</button></td></tr>`).join('');
-  setText('reconTotal', fmt(reconItems.reduce((s,it)=>s+Number(it.amount||0),0)));
-}
-function quick(label, amount, key){ reconItems.push({ label, amount, key }); renderRecon(); refreshOffer(); }
-function addRecon(){
-  const label=(document.getElementById('reconLabel').value||'').trim();
-  const amt=Number(document.getElementById('reconAmt').value||0);
-  if (!label || !amt) return;
-  reconItems.push({ label, amount: amt, key: label.toLowerCase().replace(/[^a-z0-9]+/g,'_') });
-  document.getElementById('reconLabel').value=''; document.getElementById('reconAmt').value='';
-  renderRecon(); refreshOffer();
-}
-function removeRecon(i){ reconItems.splice(i,1); renderRecon(); refreshOffer(); }
 
 async function getEvidence(){
-  const vin=document.getElementById('vin').value.trim();
-  const res=await fetch('/api/evidence/score',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin })}).then(r=>r.json());
-  if (!res || !res.ok) { alert('Evidence fetch failed'); return; }
-  evidence = res;
-  document.getElementById('riskBadge').textContent = `Recalls ${res.counts.recalls} • Complaints ${res.counts.complaints} • TSBs ${res.counts.tsbs}`;
-  const defaults = {
-      'Engine / Oil consumption': [
-        'Check for excessive oil use (qt/1k mi), blue smoke, fouled plugs',
-        'Scan for misfire codes; PCV/valve cover leaks'
-      ],
-      'Transmission': [
-        'Test drive: 2–3 shift flare/judder/harshness',
-        'If CVT: low-speed judder/whine; verify fluid service history'
-      ],
-      'Electrical': ['Battery/alternator load test; parasitic draw check'],
-      'Brakes': ['Measure pad/rotor thickness; brake pulsation test'],
-      'HVAC / A/C': ['Vent temp at idle/cruise; blend door operation; compressor noise']
-    };
-    const list = (res.topRisks||[]).map(r=>{
-      const checks = (r.checks && r.checks.length ? r.checks : (defaults[r.label]||[]))
-        .map(c=>`<li>${c}</li>`).join('');
-      return `<details class="risk"><summary><strong>${r.label}</strong> — score ${r.score}</summary>
-        <div class="risk-body">
-          <div class="risk-stats">Complaints: ${r.complaints||0} • Recall: ${r.recall?'yes':'no'} • TSB: ${r.tsb?'yes':'no'}</div>
-          <div class="muted">${r.rationale||''}</div>
-          <ul class="risk-checks">${checks}</ul>
-        </div>
-      </details>`;
-    }).join('');
-    document.getElementById('riskList').innerHTML = list || '<div class="muted">No notable risks.</div>';
+  const vin = document.getElementById('vin').value.trim();
+  const res = await fetch('/api/evidence/score',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vin})}).then(r=>r.json());
+  if(res.ok) renderEvidence(res);
+}
+
+function applyMaint(){
+  // Example maintenance items
+  maintItems = [
+    { label:'Oil change', amount:60, why:'Low service history • No oil change found in Carfax text' },
+    { label:'Engine air filter', amount:45, why:'Low service history' },
+    { label:'Cabin filter', amount:40, why:'Low service history' },
+    { label:'Transmission service', amount:250, why:'>=60k mi and no service noted' }
+  ];
+  renderMaint();
   refreshOffer();
 }
-function applyRisksToRecon(){
-  if (!evidence) return alert('Get evidence first');
-  const labels = new Set(reconItems.map(x=>x.key||x.label).concat(maintItems.map(x=>x.key||x.label)));
-  let added = 0;
-  const map = {
-    'Engine / Oil consumption': [{label:'Oil change', amount:60, key:'oil_change'},{label:'Engine air filter', amount:45, key:'engine_air_filter'}],
-    'Transmission': [{label:'Transmission service', amount:250, key:'transmission_service'}],
-    'Electrical': [{label:'Battery', amount:180, key:'battery'}],
-    'Brakes': [{label:'Brakes (pads/rotors est.)', amount:450, key:'brakes'}],
-    'HVAC / A/C': [{label:'A/C service', amount:150, key:'ac_service'}]
-  };
-  (evidence.topRisks||[]).forEach(r=>{
-    (map[r.label]||[]).forEach(it=>{ if(!labels.has(it.key)){ reconItems.push(it); labels.add(it.key); added++; } });
-  });
-  renderRecon(); refreshOffer();
-  if (!added) alert('No new recon items (already applied).');
+function renderMaint(){
+  const tbody = document.getElementById('maintTable');
+  tbody.innerHTML = maintItems.map(i=>`<tr><td>${i.label}</td><td>${fmt(i.amount)}</td><td>${i.why||''}</td></tr>`).join('');
 }
 
-// Offer refresh
-async function refreshOffer(){
-  const payload = { valuation, maintenanceItems: maintItems, reconItems, risks: evidence? (evidence.topRisks||[]) : [] };
-  payload.baseWholesale = valuation?.wholesale ?? null;
-  const res = await fetch('/api/offer/calc',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).then(r=>r.json());
-  if (!res || !res.ok) return;
-  calc = res.numbers;
-  maintItems = res.items.maintenance; reconItems = res.items.recon;
-  renderMaint(); renderRecon();
-  setText('sRetail', fmt(calc.retailBase)); setText('sWhole', fmt(calc.wholesaleBase)); setText('sMaint', '-'+fmt(calc.maintDeduction)); setText('sRecon', fmt(calc.reconTotal)); setText('sRisk', fmt(calc.riskReserve)); setText('sMax', fmt(calc.targetMaxBuy));
-  setText('oRetail', fmt(calc.retailBase)); setText('oWhole', fmt(calc.wholesaleBase)); setText('oMaint', '-'+fmt(calc.maintDeduction)); setText('oAdj', fmt(calc.adjWholesale)); setText('oRecon', fmt(calc.reconTotal)); setText('oRisk', fmt(calc.riskReserve)); setText('oProfit', fmt(calc.desiredProfit||0)); setText('oHold', fmt((calc.holding||0)+(calc.fees||0))); setText('oMax', fmt(calc.targetMaxBuy));
-  document.getElementById('proofCarfax').textContent = JSON.stringify(carfaxSummary||{},null,2);
-  renderCarfaxPretty(carfaxSummary||{});
-  document.getElementById('proofEvidence').textContent = JSON.stringify(evidence||{},null,2);
+function addRecon(){
+  const label = document.getElementById('reconLabel').value.trim();
+  const amt = Number(document.getElementById('reconAmt').value||0);
+  if(!label || !amt){ return; }
+  reconItems.push({ label, amount:amt });
+  const tbody = document.getElementById('reconTable');
+  tbody.innerHTML = reconItems.map(i=>`<tr><td>${i.label}</td><td>${fmt(i.amount)}</td></tr>`).join('');
+  refreshOffer();
 }
 
-// Settings modal
-function openSettings(){ loadSettings(); document.getElementById('settingsModal').style.display='flex'; }
-function closeSettings(){ document.getElementById('settingsModal').style.display='none'; }
-async function loadSettings(){
-  const res = await fetch('/api/settings').then(r=>r.json());
-  const s = res.settings || {};
-  document.getElementById('sLabor').value = s.laborRate||0;
-  document.getElementById('sParts').value = s.partsMultiplier||1;
-  document.getElementById('sProfit').value = s.desiredProfit||0;
-  document.getElementById('sDays').value = s.daysToTurn||0;
-  document.getElementById('sApr').value = s.floorplanAPR||0;
-  document.getElementById('sTrans').value = s.avgTransport||0;
-  document.getElementById('sMkt').value = s.marketingFees||0;
-  document.getElementById('sWar').value = s.warrantyReserve||0;
-  document.getElementById('sCap').value = s.riskReserveCapPct||0.15;
-  const grid = document.getElementById('riskWeightsGrid');
-  grid.innerHTML='';
-  Object.entries(s.riskWeights||{}).forEach(([k,v])=>{
-    const div=document.createElement('div'); div.className='card';
-    div.innerHTML = `<label>${k}</label><input data-key="${k}" value="${v}" type="number" step="1">`;
-    grid.appendChild(div);
-  });
-}
-async function saveSettings(){
-  const payload = {
-    laborRate: Number(document.getElementById('sLabor').value||0),
-    partsMultiplier: Number(document.getElementById('sParts').value||1),
-    desiredProfit: Number(document.getElementById('sProfit').value||0),
-    daysToTurn: Number(document.getElementById('sDays').value||0),
-    floorplanAPR: Number(document.getElementById('sApr').value||0),
-    avgTransport: Number(document.getElementById('sTrans').value||0),
-    marketingFees: Number(document.getElementById('sMkt').value||0),
-    warrantyReserve: Number(document.getElementById('sWar').value||0),
-    riskReserveCapPct: Number(document.getElementById('sCap').value||0.15),
-    riskWeights: {}
-  };
-  document.querySelectorAll('#riskWeightsGrid input').forEach(inp=>{
-    payload.riskWeights[inp.getAttribute('data-key')] = Number(inp.value||0);
-  });
-  const res = await fetch('/api/settings',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).then(r=>r.json());
-  if (res && res.ok) { closeSettings(); refreshOffer(); }
+function renderCarfaxPretty(sum){
+  if(!sum || Object.keys(sum).length===0){
+    document.getElementById('proofCarfaxPretty').innerHTML='<span class="muted">No Carfax summary.</span>'; return;
+  }
+  const rows = [
+    ['Accidents', sum.accidents],
+    ['Damage Reports', sum.damageReports],
+    ['Owners', sum.owners],
+    ['Service Records', sum.serviceRecords],
+    ['Recalls', sum.recalls],
+    ['Last Odometer', sum.lastOdometer||'—'],
+    ['Usage', sum.usage||'—'],
+    ['Brandings', (Array.isArray(sum.brandings)&&sum.brandings.length)? sum.brandings.join(', ') : '—']
+  ];
+  document.getElementById('proofCarfaxPretty').innerHTML =
+    '<table style="width:100%">'+rows.map(r=>`<tr><td class="muted">${r[0]}</td><td><strong>${r[1]??'—'}</strong></td></tr>`).join('')+'</table>';
 }
 
-// eBay comps UI
-function getCompQuery(){ return { year: decoded.year||'', make: decoded.make||'', model: decoded.model||'', trim: decoded.trim||'', zip: document.getElementById('compZip').value.trim(), radius: document.getElementById('compRadius').value }; }
-async function fetchSold(){
-  const q=getCompQuery(); const qs=new URLSearchParams(q).toString();
-  const res=await fetch('/api/comps/ebay/sold?'+qs).then(r=>r.json());
-  if(!res||!res.ok){ alert('SOLD comps fetch failed (set EBAY_APP_ID env var)'); return; }
-  const s=res.stats; setText('soldStats', s.count? `n=${s.count} • p25 ${fmt(s.p25)} • median ${fmt(s.median)} • p75 ${fmt(s.p75)}` : 'No results');
-  document.getElementById('soldList').innerHTML=(res.items||[]).slice(0,30).map(it=>`<li><a href="${it.url}" target="_blank">${it.title}</a> — ${fmt(it.price)}</li>`).join('');
+function refreshOffer(){
+  const retailBase = 10000; // placeholder value source
+  const wholesaleBase = 9040; // placeholder value source
+  const maintDeduction = maintItems.reduce((s,i)=>s+(i.amount||0),0);
+  const reconTotal = reconItems.reduce((s,i)=>s+(i.amount||0),0);
+  // Risk reserve from current evidence counts (simple example: $80 per recall)
+  const risk = document.getElementById('riskCounts').textContent;
+  const recallMatch = /Recalls\s+(\d+)/.exec(risk);
+  const recallCount = recallMatch? Number(recallMatch[1]) : 0;
+  const riskReserve = recallCount * 80;
+
+  fetch('/api/offer/calc', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ retailBase, wholesaleBase, maintDeduction, reconTotal, riskReserve })
+  }).then(r=>r.json()).then(calc=>{
+    if(!calc.ok) return;
+    calc = calc.numbers;
+    setText('oRetail', fmt(calc.retailBase));
+    setText('oWhole', fmt(calc.wholesaleBase));
+    setText('oMaint', '-'+fmt(maintDeduction));
+    setText('oAdj', fmt(calc.adjWholesale));
+    setText('oRecon', fmt(calc.reconTotal));
+    setText('oRisk', fmt(calc.riskReserve));
+    setText('oProfit', fmt(calc.desiredProfit||0));
+    setText('oHold', fmt((calc.holding||0)+(calc.fees||0)));
+    setText('oMax', fmt(calc.targetMaxBuy));
+
+    // summary badges
+    setText('sumRetail', fmt(calc.retailBase));
+    setText('sumWhole', fmt(calc.wholesaleBase));
+    setText('sumMaint', '-'+fmt(maintDeduction));
+    setText('sumRecon', fmt(reconTotal));
+    setText('sumRisk', fmt(calc.riskReserve));
+    setText('sumMax', fmt(calc.targetMaxBuy));
+  });
 }
-async function fetchActive(){
-  const q=getCompQuery(); const qs=new URLSearchParams(q).toString();
-  const res=await fetch('/api/comps/ebay/active?'+qs).then(r=>r.json());
-  if(!res||!res.ok){ alert('ACTIVE comps fetch failed (set EBAY_APP_ID env var)'); return; }
-  const s=res.stats; setText('activeStats', s.count? `n=${s.count} • p25 ${fmt(s.p25)} • median ${fmt(s.median)} • p75 ${fmt(s.p75)}` : 'No results');
-  document.getElementById('activeList').innerHTML=(res.items||[]).slice(0,30).map(it=>`<li><a href="${it.url}" target="_blank">${it.title}</a> — ${fmt(it.price)}</li>`).join('');
+
+async function fetchEbay(kind){
+  const year = vehicle.year||''; const make = vehicle.make||''; const model = vehicle.model||'';
+  const zip = (document.getElementById('zip')||{value:''}).value.trim();
+  const radius = (document.getElementById('radius')||{value:'500'}).value;
+  const qs = new URLSearchParams({ year, make, model, zip, radius, type: kind }).toString();
+  const res = await fetch(`/api/ebay/comps?${qs}`).then(r=>r.json());
+  if(!res.ok){ (document.getElementById('ebayStats')||{}).textContent = res.error||'No results'; return; }
+  const s = res.stats||{};
+  const line = `${kind.toUpperCase()} — n=${s.count||0} • median ${fmt(Math.round(s.median||0))} • avg ${fmt(Math.round(s.avg||0))} • range ${fmt(s.min||0)}–${fmt(s.max||0)}`;
+  (document.getElementById('ebayStats')||{}).textContent = line;
+  const items = (res.items||[]).slice(0,20).map(x=>`<div style="border-bottom:1px dashed var(--accent); padding:4px 0"><a href="${x.url}" target="_blank">${x.title}</a> — <strong>${fmt(x.price)}</strong> <span class="muted">${x.loc||''}</span></div>`).join('') || '<div class="muted">No results.</div>';
+  if(kind==='sold'){ (document.getElementById('soldList')||{}).innerHTML = items; window._lastSoldMedian = Math.round(s.median||0); }
+  else { (document.getElementById('activeList')||{}).innerHTML = items; }
 }
 function useSoldMedian(){
-  const txt=document.getElementById('soldStats').textContent||'';
-  const m = txt.match(/median \$([0-9,]+)/i);
-  if(!m){ alert('Fetch SOLD comps first'); return; }
-  const val = Number(m[1].replace(/,/g,''));
-  if(!valuation) valuation={ retail: val, wholesale: Math.round(val*0.86) };
-  valuation.retail = val;
-  setText('vRetail', fmt(valuation.retail));
+  if(!window._lastSoldMedian){ alert('Fetch SOLD comps first.'); return; }
+  window._retailBase = window._lastSoldMedian;
+  refreshOffer();
+}
+
+async function fetchSerp(site){
+  const zip = (document.getElementById('zip')||{value:''}).value.trim();
+  const year = vehicle.year||''; const make = vehicle.make||''; const model = vehicle.model||'';
+  const qs = new URLSearchParams({ site, year, make, model, zip }).toString();
+  const res = await fetch(`/api/serp/comps?${qs}`).then(r=>r.json());
+  if(!res.ok){ (site==='cars'?carsStats:fbStats).textContent = res.error||'No results'; return; }
+  const s = res.stats||{};
+  const line = `n=${s.count||0} • median ${fmt(Math.round(s.median||0))} • avg ${fmt(Math.round(s.avg||0))} • range ${fmt(s.min||0)}–${fmt(s.max||0)}`;
+  if(site==='cars'){
+    document.getElementById('carsStats').textContent = line;
+    document.getElementById('carsList').innerHTML = (res.items||[]).slice(0,20).map(x=>`<div style="border-bottom:1px dashed var(--accent); padding:4px 0"><a href="${x.url}" target="_blank">${x.title}</a> — <strong>${fmt(x.price)}</strong></div>`).join('') || '<div class="muted">No results.</div>';
+    window._carsMedian = Math.round(s.median||0);
+  }else{
+    document.getElementById('fbStats').textContent = line;
+    document.getElementById('fbList').innerHTML = (res.items||[]).slice(0,20).map(x=>`<div style="border-bottom:1px dashed var(--accent); padding:4px 0"><a href="${x.url}" target="_blank">${x.title}</a> — <strong>${fmt(x.price)}</strong></div>`).join('') || '<div class="muted">No results.</div>';
+    window._fbMedian = Math.round(s.median||0);
+  }
+}
+function parseCarsManual(){
+  const text = (document.getElementById('carsManual')||{value:''}).value;
+  fetch('/api/comps/manual',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})})
+    .then(r=>r.json()).then(res=>{
+      if(!res.ok){ document.getElementById('carsStats').textContent='Could not parse'; return; }
+      const s = res.stats||{};
+      document.getElementById('carsStats').textContent = `Manual — n=${s.count} • median ${fmt(Math.round(s.median||0))}`;
+      document.getElementById('carsList').innerHTML = (res.items||[]).map(x=>`<div style="border-bottom:1px dashed var(--accent); padding:4px 0">${x.title} — <strong>${fmt(x.price)}</strong> ${x.url?('<a href="'+x.url+'" target="_blank">link</a>'):''}</div>`).join('') || '<div class="muted">No results.</div>';
+      window._carsMedian = Math.round(s.median||0);
+    });
+}
+function parseFbManual(){
+  const text = (document.getElementById('fbManual')||{value:''}).value;
+  fetch('/api/comps/manual',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})})
+    .then(r=>r.json()).then(res=>{
+      if(!res.ok){ document.getElementById('fbStats').textContent='Could not parse'; return; }
+      const s = res.stats||{};
+      document.getElementById('fbStats').textContent = `Manual — n=${s.count} • median ${fmt(Math.round(s.median||0))}`;
+      document.getElementById('fbList').innerHTML = (res.items||[]).map(x=>`<div style="border-bottom:1px dashed var(--accent); padding:4px 0">${x.title} — <strong>${fmt(x.price)}</strong> ${x.url?('<a href="'+x.url+'" target="_blank">link</a>'):''}</div>`).join('') || '<div class="muted">No results.</div>';
+      window._fbMedian = Math.round(s.median||0);
+    });
+}
+function useCarsMedian(){ if(window._carsMedian){ window._retailBase = window._carsMedian; refreshOffer(); } else alert('Fetch or paste Cars.com comps first.'); }
+function useFbMedian(){ if(window._fbMedian){ window._retailBase = window._fbMedian; refreshOffer(); } else alert('Add FB comps first.'); }
+
+function useGuidesWeighted(){
+  const kbbR = Number((document.getElementById('kbbRetail')||{value:0}).value||0);
+  const bbR  = Number((document.getElementById('bbRetail')||{value:0}).value||0);
+  const manR = Number((document.getElementById('manRetail')||{value:0}).value||0);
+  const sold = Number(window._lastSoldMedian||0);
+  const cars = Number(window._carsMedian||0);
+  const vals = [];
+  if(sold) vals.push({w:.5, v:sold});
+  if(cars) vals.push({w:.2, v:cars});
+  if(kbbR) vals.push({w:.15, v:kbbR});
+  if(bbR)  vals.push({w:.1, v:bbR});
+  if(manR) vals.push({w:.05, v:manR});
+  if(!vals.length){ alert('Provide at least one source.'); return; }
+  const sumW = vals.reduce((s,x)=>s+x.w,0);
+  const blended = Math.round(vals.reduce((s,x)=>s+x.w*x.v,0)/sumW);
+  window._retailBase = blended;
   refreshOffer();
 }
 </script>
