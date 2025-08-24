@@ -28,7 +28,26 @@ input,select{ border:1px solid var(--border); border-radius:10px; padding:10px 1
 .risks summary{ cursor:pointer; }
 .sticky{ position:sticky; top:0; z-index:10; background:rgba(247,250,252,.9); backdrop-filter:saturate(180%) blur(6px); padding:8px 0; border-bottom:1px solid var(--border); }
 .badge{ display:inline-block; padding:6px 10px; border-radius:999px; background:#fff; border:1px solid var(--border); margin-right:8px; box-shadow:0 1px 6px rgba(0,0,0,.05); }
-  </style>
+  
+/* modes */
+body.mode-customer .internal-only{ display:none !important; }
+body.mode-internal .customer-only{ display:none !important; }
+
+/* print styles */
+@media print{
+  .no-print{ display:none !important; }
+  body{ background:#fff !important; }
+  .card{ box-shadow:none !important; border-color:#bbb !important; }
+  .badge{ border-color:#bbb !important; background:#fff !important; }
+  a{ color:#000 !important; text-decoration:none; }
+  .muted{ color:#333 !important; }
+}
+
+/* contributions bar */
+.contrib-bar{ display:flex; height:10px; border-radius:6px; overflow:hidden; border:1px solid var(--border); }
+.contrib-seg{ height:100%; }
+
+</style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.min.js">
 async function readFileArrayBuffer(f){
   return new Promise((resolve,reject)=>{
@@ -125,6 +144,71 @@ function showStep(n){
   const ids = ['step1','step2','step3','step4'];
   ids.forEach(id=>{ const el=document.getElementById(id); if(!el) return; if(id==='step'+n) el.scrollIntoView({behavior:'smooth', block:'start'}); });
 }
+
+// --- PDF mode + print helpers ---
+function setPdfMode(mode){
+  document.body.classList.remove('mode-customer','mode-internal');
+  document.body.classList.add(mode==='internal' ? 'mode-internal' : 'mode-customer');
+  const sel = document.getElementById('pdfMode'); if(sel) sel.value = (mode==='internal'?'internal':'customer');
+}
+function printCustomer(){ setPdfMode('customer'); window.print(); }
+function printInternal(){ setPdfMode('internal'); window.print(); }
+setPdfMode('customer');
+
+// --- Condition grade ---
+window._condition = 'B'; // default
+const COND = {
+  A: { label:'Excellent', recon:0.80, risk:0.80 },
+  B: { label:'Average',   recon:1.00, risk:1.00 },
+  C: { label:'Rough',     recon:1.30, risk:1.20 }
+};
+function setCondition(g){
+  window._condition = (g==='A'||g==='B'||g==='C')? g : 'B';
+  ['condA','condB','condC'].forEach(id=>{ const el=document.getElementById(id); if(!el) return; el.classList.remove('primary'); });
+  const el = document.getElementById('cond'+window._condition); if(el) el.classList.add('primary');
+  refreshOffer();
+}
+
+// --- Weighted retail ---
+function applyWeightedRetail(){
+  const sources = [];
+  const wSold = Number(document.getElementById('wSold').value||0);
+  const wCars = Number(document.getElementById('wCars').value||0);
+  const wKbb  = Number(document.getElementById('wKbb').value||0);
+  const wBb   = Number(document.getElementById('wBb').value||0);
+  const wMan  = Number(document.getElementById('wMan').value||0);
+  const vSold = Number(window._lastSoldMedian||0);
+  const vCars = Number(window._carsMedian||0);
+  const vKbb  = Number((document.getElementById('kbbRetail')||{value:0}).value||0);
+  const vBb   = Number((document.getElementById('bbRetail')||{value:0}).value||0);
+  const vMan  = Number((document.getElementById('manRetail')||{value:0}).value||0);
+  if (vSold && wSold) sources.push({id:'Sold', w:wSold, v:vSold});
+  if (vCars && wCars) sources.push({id:'Cars', w:wCars, v:vCars});
+  if (vKbb  && wKbb ) sources.push({id:'KBB',  w:wKbb,  v:vKbb });
+  if (vBb   && wBb  ) sources.push({id:'BB',   w:wBb,   v:vBb  });
+  if (vMan  && wMan ) sources.push({id:'Manual',w:wMan, v:vMan});
+
+  if (!sources.length){ alert('Provide at least one source value.'); return; }
+  const sumW = sources.reduce((s,x)=>s+x.w,0) || 1;
+  const contribs = sources.map(s=>({id:s.id, pct: (s.w/sumW)*100, part: s.w/sumW*s.v}));
+  const blended = Math.round(contribs.reduce((s,x)=>s+x.part,0));
+
+  // Update UI
+  document.getElementById('weightedOut').textContent = fmt(blended);
+  const byId = Object.fromEntries(contribs.map(c=>[c.id,c]));
+  const setW = (id, pct)=>{ const el=document.getElementById(id); if(el) el.style.width = (pct||0)+'%'; };
+  setW('contribSold', byId.Sold?.pct||0);
+  setW('contribCars', byId.Cars?.pct||0);
+  setW('contribKbb',  byId.KBB?.pct||0);
+  setW('contribBb',   byId.BB?.pct||0);
+  setW('contribMan',  byId.Manual?.pct||0);
+  document.getElementById('weightedExplain').textContent = sources.map(s=>`${s.id} (${Math.round((s.w/sumW)*100)}%) × ${fmt(s.v)}`).join(' + ');
+
+  // Apply as current retail base
+  window._retailBase = blended;
+  refreshOffer();
+}
+
 </script>
   <script>window.pdfjsLib = window['pdfjs-dist/build/pdf']; pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.worker.min.js';
 async function readFileArrayBuffer(f){
@@ -222,6 +306,71 @@ function showStep(n){
   const ids = ['step1','step2','step3','step4'];
   ids.forEach(id=>{ const el=document.getElementById(id); if(!el) return; if(id==='step'+n) el.scrollIntoView({behavior:'smooth', block:'start'}); });
 }
+
+// --- PDF mode + print helpers ---
+function setPdfMode(mode){
+  document.body.classList.remove('mode-customer','mode-internal');
+  document.body.classList.add(mode==='internal' ? 'mode-internal' : 'mode-customer');
+  const sel = document.getElementById('pdfMode'); if(sel) sel.value = (mode==='internal'?'internal':'customer');
+}
+function printCustomer(){ setPdfMode('customer'); window.print(); }
+function printInternal(){ setPdfMode('internal'); window.print(); }
+setPdfMode('customer');
+
+// --- Condition grade ---
+window._condition = 'B'; // default
+const COND = {
+  A: { label:'Excellent', recon:0.80, risk:0.80 },
+  B: { label:'Average',   recon:1.00, risk:1.00 },
+  C: { label:'Rough',     recon:1.30, risk:1.20 }
+};
+function setCondition(g){
+  window._condition = (g==='A'||g==='B'||g==='C')? g : 'B';
+  ['condA','condB','condC'].forEach(id=>{ const el=document.getElementById(id); if(!el) return; el.classList.remove('primary'); });
+  const el = document.getElementById('cond'+window._condition); if(el) el.classList.add('primary');
+  refreshOffer();
+}
+
+// --- Weighted retail ---
+function applyWeightedRetail(){
+  const sources = [];
+  const wSold = Number(document.getElementById('wSold').value||0);
+  const wCars = Number(document.getElementById('wCars').value||0);
+  const wKbb  = Number(document.getElementById('wKbb').value||0);
+  const wBb   = Number(document.getElementById('wBb').value||0);
+  const wMan  = Number(document.getElementById('wMan').value||0);
+  const vSold = Number(window._lastSoldMedian||0);
+  const vCars = Number(window._carsMedian||0);
+  const vKbb  = Number((document.getElementById('kbbRetail')||{value:0}).value||0);
+  const vBb   = Number((document.getElementById('bbRetail')||{value:0}).value||0);
+  const vMan  = Number((document.getElementById('manRetail')||{value:0}).value||0);
+  if (vSold && wSold) sources.push({id:'Sold', w:wSold, v:vSold});
+  if (vCars && wCars) sources.push({id:'Cars', w:wCars, v:vCars});
+  if (vKbb  && wKbb ) sources.push({id:'KBB',  w:wKbb,  v:vKbb });
+  if (vBb   && wBb  ) sources.push({id:'BB',   w:wBb,   v:vBb  });
+  if (vMan  && wMan ) sources.push({id:'Manual',w:wMan, v:vMan});
+
+  if (!sources.length){ alert('Provide at least one source value.'); return; }
+  const sumW = sources.reduce((s,x)=>s+x.w,0) || 1;
+  const contribs = sources.map(s=>({id:s.id, pct: (s.w/sumW)*100, part: s.w/sumW*s.v}));
+  const blended = Math.round(contribs.reduce((s,x)=>s+x.part,0));
+
+  // Update UI
+  document.getElementById('weightedOut').textContent = fmt(blended);
+  const byId = Object.fromEntries(contribs.map(c=>[c.id,c]));
+  const setW = (id, pct)=>{ const el=document.getElementById(id); if(el) el.style.width = (pct||0)+'%'; };
+  setW('contribSold', byId.Sold?.pct||0);
+  setW('contribCars', byId.Cars?.pct||0);
+  setW('contribKbb',  byId.KBB?.pct||0);
+  setW('contribBb',   byId.BB?.pct||0);
+  setW('contribMan',  byId.Manual?.pct||0);
+  document.getElementById('weightedExplain').textContent = sources.map(s=>`${s.id} (${Math.round((s.w/sumW)*100)}%) × ${fmt(s.v)}`).join(' + ');
+
+  // Apply as current retail base
+  window._retailBase = blended;
+  refreshOffer();
+}
+
 </script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js">
 async function readFileArrayBuffer(f){
@@ -319,6 +468,71 @@ function showStep(n){
   const ids = ['step1','step2','step3','step4'];
   ids.forEach(id=>{ const el=document.getElementById(id); if(!el) return; if(id==='step'+n) el.scrollIntoView({behavior:'smooth', block:'start'}); });
 }
+
+// --- PDF mode + print helpers ---
+function setPdfMode(mode){
+  document.body.classList.remove('mode-customer','mode-internal');
+  document.body.classList.add(mode==='internal' ? 'mode-internal' : 'mode-customer');
+  const sel = document.getElementById('pdfMode'); if(sel) sel.value = (mode==='internal'?'internal':'customer');
+}
+function printCustomer(){ setPdfMode('customer'); window.print(); }
+function printInternal(){ setPdfMode('internal'); window.print(); }
+setPdfMode('customer');
+
+// --- Condition grade ---
+window._condition = 'B'; // default
+const COND = {
+  A: { label:'Excellent', recon:0.80, risk:0.80 },
+  B: { label:'Average',   recon:1.00, risk:1.00 },
+  C: { label:'Rough',     recon:1.30, risk:1.20 }
+};
+function setCondition(g){
+  window._condition = (g==='A'||g==='B'||g==='C')? g : 'B';
+  ['condA','condB','condC'].forEach(id=>{ const el=document.getElementById(id); if(!el) return; el.classList.remove('primary'); });
+  const el = document.getElementById('cond'+window._condition); if(el) el.classList.add('primary');
+  refreshOffer();
+}
+
+// --- Weighted retail ---
+function applyWeightedRetail(){
+  const sources = [];
+  const wSold = Number(document.getElementById('wSold').value||0);
+  const wCars = Number(document.getElementById('wCars').value||0);
+  const wKbb  = Number(document.getElementById('wKbb').value||0);
+  const wBb   = Number(document.getElementById('wBb').value||0);
+  const wMan  = Number(document.getElementById('wMan').value||0);
+  const vSold = Number(window._lastSoldMedian||0);
+  const vCars = Number(window._carsMedian||0);
+  const vKbb  = Number((document.getElementById('kbbRetail')||{value:0}).value||0);
+  const vBb   = Number((document.getElementById('bbRetail')||{value:0}).value||0);
+  const vMan  = Number((document.getElementById('manRetail')||{value:0}).value||0);
+  if (vSold && wSold) sources.push({id:'Sold', w:wSold, v:vSold});
+  if (vCars && wCars) sources.push({id:'Cars', w:wCars, v:vCars});
+  if (vKbb  && wKbb ) sources.push({id:'KBB',  w:wKbb,  v:vKbb });
+  if (vBb   && wBb  ) sources.push({id:'BB',   w:wBb,   v:vBb  });
+  if (vMan  && wMan ) sources.push({id:'Manual',w:wMan, v:vMan});
+
+  if (!sources.length){ alert('Provide at least one source value.'); return; }
+  const sumW = sources.reduce((s,x)=>s+x.w,0) || 1;
+  const contribs = sources.map(s=>({id:s.id, pct: (s.w/sumW)*100, part: s.w/sumW*s.v}));
+  const blended = Math.round(contribs.reduce((s,x)=>s+x.part,0));
+
+  // Update UI
+  document.getElementById('weightedOut').textContent = fmt(blended);
+  const byId = Object.fromEntries(contribs.map(c=>[c.id,c]));
+  const setW = (id, pct)=>{ const el=document.getElementById(id); if(el) el.style.width = (pct||0)+'%'; };
+  setW('contribSold', byId.Sold?.pct||0);
+  setW('contribCars', byId.Cars?.pct||0);
+  setW('contribKbb',  byId.KBB?.pct||0);
+  setW('contribBb',   byId.BB?.pct||0);
+  setW('contribMan',  byId.Manual?.pct||0);
+  document.getElementById('weightedExplain').textContent = sources.map(s=>`${s.id} (${Math.round((s.w/sumW)*100)}%) × ${fmt(s.v)}`).join(' + ');
+
+  // Apply as current retail base
+  window._retailBase = blended;
+  refreshOffer();
+}
+
 </script>
 </head>
 <body>
@@ -332,6 +546,10 @@ function showStep(n){
       <span class="badge">Recon: <span id="sumRecon">$0</span></span>
       <span class="badge">Risk: <span id="sumRisk">$0</span></span>
       <span class="badge">Max Buy: <span id="sumMax">$0</span></span>
+<span class="badge no-print">PDF mode: <select id="pdfMode" onchange="setPdfMode(this.value)"><option value="customer" selected>Customer</option><option value="internal">Internal</option></select></span>
+<button class="btn no-print" onclick="printCustomer()">Print Customer</button>
+<button class="btn no-print" onclick="printInternal()">Print Internal</button>
+<span class="badge no-print">Condition: <button id="condA" class="btn" onclick="setCondition('A')">A</button> <button id="condB" class="btn" onclick="setCondition('B')">B</button> <button id="condC" class="btn" onclick="setCondition('C')">C</button></span>
       <button class="btn" onclick="openSettings()">Settings</button>
       <button class="btn primary" onclick="window.print()">Print Customer PDF</button>
     </div>
@@ -489,11 +707,35 @@ function showStep(n){
             <div class="muted" style="margin-top:6px">Weights: SOLD median 0.5, Cars.com 0.2, KBB 0.15, Black Book 0.1, Manual 0.05 (only sources you provide are used).</div>
           </div>
         </div>
+        
+        <div class="card" id="weightsCard">
+          <h4>Weighted Retail</h4>
+          <div class="muted">Blend the sources you’ve fetched/entered. Move sliders to adjust weights (we normalize automatically across provided sources).</div>
+          <div style="display:grid; grid-template-columns:1fr 120px; gap:10px; align-items:center; margin-top:8px">
+            <label>eBay SOLD median</label><input id="wSold" type="range" min="0" max="100" value="50">
+            <label>Cars.com median</label><input id="wCars" type="range" min="0" max="100" value="20">
+            <label>KBB retail</label><input id="wKbb" type="range" min="0" max="100" value="15">
+            <label>Black Book retail</label><input id="wBb" type="range" min="0" max="100" value="10">
+            <label>Manual retail</label><input id="wMan" type="range" min="0" max="100" value="5">
+          </div>
+          <div style="margin-top:10px; display:flex; gap:8px; align-items:center">
+            <button class="btn" onclick="applyWeightedRetail()">Apply Weighted Retail</button>
+            <div class="muted">Result: <strong id="weightedOut">$0</strong></div>
+          </div>
+          <div class="contrib-bar" style="margin-top:8px">
+            <div id="contribSold" class="contrib-seg" style="background:#c7d2fe; width:0%"></div>
+            <div id="contribCars" class="contrib-seg" style="background:#a7f3d0; width:0%"></div>
+            <div id="contribKbb" class="contrib-seg" style="background:#fde68a; width:0%"></div>
+            <div id="contribBb" class="contrib-seg" style="background:#fca5a5; width:0%"></div>
+            <div id="contribMan" class="contrib-seg" style="background:#d1fae5; width:0%"></div>
+          </div>
+          <div id="weightedExplain" class="muted" style="margin-top:6px"></div>
+        </div>
         <div class="card">
           <h4>Proof</h4>
           <div id="proofCarfaxPretty" class="card"></div>
-          <details><summary class="muted">Carfax summary (raw)</summary><pre id="proofCarfax"></pre></details>
-          <details><summary class="muted">Evidence (raw)</summary><pre id="proofEvidence"></pre></details>
+          <details><summary class="muted">Carfax summary (raw)</summary><pre id="proofCarfax" class="internal-only"></pre></details>
+          <details><summary class="muted">Evidence (raw)</summary><pre id="proofEvidence" class="internal-only"></pre></details>
         </div>
       </div>
     </div>
@@ -599,14 +841,19 @@ function refreshOffer(){
   const retailBase = 10000; // placeholder value source
   const wholesaleBase = 9040; // placeholder value source
   const maintDeduction = maintItems.reduce((s,i)=>s+(i.amount||0),0);
-  const reconTotal = reconItems.reduce((s,i)=>s+(i.amount||0),0);
+  let reconTotal = reconItems.reduce((s,i)=>s+(i.amount||0),0);
   // Risk reserve from current evidence counts (simple example: $80 per recall)
   const risk = document.getElementById('riskCounts').textContent;
   const recallMatch = /Recalls\s+(\d+)/.exec(risk);
   const recallCount = recallMatch? Number(recallMatch[1]) : 0;
-  const riskReserve = recallCount * 80;
+  let riskReserve = recallCount * 80;
+  // v6.4.0: apply condition multipliers
+  const cond = (window._condition||'B');
+  const cf = {A:{recon:0.80,risk:0.80}, B:{recon:1.00,risk:1.00}, C:{recon:1.30,risk:1.20}}[cond] || {recon:1.00,risk:1.00};
+  reconTotal = Math.round(reconTotal * cf.recon);
+  riskReserve = Math.round(riskReserve * cf.risk);
 
-  fetch('/api/offer/calc', {
+  /*v640*/ fetch('/api/offer/calc', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body:JSON.stringify({ retailBase, wholesaleBase, maintDeduction, reconTotal, riskReserve })
   }).then(r=>r.json()).then(calc=>{
@@ -809,6 +1056,71 @@ function showStep(n){
   const ids = ['step1','step2','step3','step4'];
   ids.forEach(id=>{ const el=document.getElementById(id); if(!el) return; if(id==='step'+n) el.scrollIntoView({behavior:'smooth', block:'start'}); });
 }
+
+// --- PDF mode + print helpers ---
+function setPdfMode(mode){
+  document.body.classList.remove('mode-customer','mode-internal');
+  document.body.classList.add(mode==='internal' ? 'mode-internal' : 'mode-customer');
+  const sel = document.getElementById('pdfMode'); if(sel) sel.value = (mode==='internal'?'internal':'customer');
+}
+function printCustomer(){ setPdfMode('customer'); window.print(); }
+function printInternal(){ setPdfMode('internal'); window.print(); }
+setPdfMode('customer');
+
+// --- Condition grade ---
+window._condition = 'B'; // default
+const COND = {
+  A: { label:'Excellent', recon:0.80, risk:0.80 },
+  B: { label:'Average',   recon:1.00, risk:1.00 },
+  C: { label:'Rough',     recon:1.30, risk:1.20 }
+};
+function setCondition(g){
+  window._condition = (g==='A'||g==='B'||g==='C')? g : 'B';
+  ['condA','condB','condC'].forEach(id=>{ const el=document.getElementById(id); if(!el) return; el.classList.remove('primary'); });
+  const el = document.getElementById('cond'+window._condition); if(el) el.classList.add('primary');
+  refreshOffer();
+}
+
+// --- Weighted retail ---
+function applyWeightedRetail(){
+  const sources = [];
+  const wSold = Number(document.getElementById('wSold').value||0);
+  const wCars = Number(document.getElementById('wCars').value||0);
+  const wKbb  = Number(document.getElementById('wKbb').value||0);
+  const wBb   = Number(document.getElementById('wBb').value||0);
+  const wMan  = Number(document.getElementById('wMan').value||0);
+  const vSold = Number(window._lastSoldMedian||0);
+  const vCars = Number(window._carsMedian||0);
+  const vKbb  = Number((document.getElementById('kbbRetail')||{value:0}).value||0);
+  const vBb   = Number((document.getElementById('bbRetail')||{value:0}).value||0);
+  const vMan  = Number((document.getElementById('manRetail')||{value:0}).value||0);
+  if (vSold && wSold) sources.push({id:'Sold', w:wSold, v:vSold});
+  if (vCars && wCars) sources.push({id:'Cars', w:wCars, v:vCars});
+  if (vKbb  && wKbb ) sources.push({id:'KBB',  w:wKbb,  v:vKbb });
+  if (vBb   && wBb  ) sources.push({id:'BB',   w:wBb,   v:vBb  });
+  if (vMan  && wMan ) sources.push({id:'Manual',w:wMan, v:vMan});
+
+  if (!sources.length){ alert('Provide at least one source value.'); return; }
+  const sumW = sources.reduce((s,x)=>s+x.w,0) || 1;
+  const contribs = sources.map(s=>({id:s.id, pct: (s.w/sumW)*100, part: s.w/sumW*s.v}));
+  const blended = Math.round(contribs.reduce((s,x)=>s+x.part,0));
+
+  // Update UI
+  document.getElementById('weightedOut').textContent = fmt(blended);
+  const byId = Object.fromEntries(contribs.map(c=>[c.id,c]));
+  const setW = (id, pct)=>{ const el=document.getElementById(id); if(el) el.style.width = (pct||0)+'%'; };
+  setW('contribSold', byId.Sold?.pct||0);
+  setW('contribCars', byId.Cars?.pct||0);
+  setW('contribKbb',  byId.KBB?.pct||0);
+  setW('contribBb',   byId.BB?.pct||0);
+  setW('contribMan',  byId.Manual?.pct||0);
+  document.getElementById('weightedExplain').textContent = sources.map(s=>`${s.id} (${Math.round((s.w/sumW)*100)}%) × ${fmt(s.v)}`).join(' + ');
+
+  // Apply as current retail base
+  window._retailBase = blended;
+  refreshOffer();
+}
+
 </script>
 </body>
 </html>
