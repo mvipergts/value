@@ -238,3 +238,5 @@ app.post('/api/offer/calc', (req,res)=>{
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, ()=> console.log('Server on http://localhost:'+PORT));
+
+app.get('/api/health', (req,res)=>res.json({ok:true, time: Date.now()}));

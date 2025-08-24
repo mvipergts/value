@@ -209,8 +209,10 @@ function applyWeightedRetail(){
   refreshOffer();
 }
 
+
+window.addEventListener('error', (e)=>{ console.error('JS error', e.error||e.message); });
 </script>
-  <script>window.pdfjsLib = window['pdfjs-dist/build/pdf']; pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.worker.min.js';
+  <script>try { window.pdfjsLib = window['pdfjs-dist/build/pdf']; if (window.pdfjsLib && pdfjsLib.GlobalWorkerOptions) { pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.worker.min.js'; } } catch(e){ console.warn('PDF.js init failed', e); }
 async function readFileArrayBuffer(f){
   return new Promise((resolve,reject)=>{
     const r = new FileReader();
@@ -371,6 +373,8 @@ function applyWeightedRetail(){
   refreshOffer();
 }
 
+
+window.addEventListener('error', (e)=>{ console.error('JS error', e.error||e.message); });
 </script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js">
 async function readFileArrayBuffer(f){
@@ -533,6 +537,8 @@ function applyWeightedRetail(){
   refreshOffer();
 }
 
+
+window.addEventListener('error', (e)=>{ console.error('JS error', e.error||e.message); });
 </script>
 </head>
 <body>
@@ -564,7 +570,7 @@ function applyWeightedRetail(){
       <div style="display:flex; gap:8px; flex-wrap:wrap">
         <input id="vin" placeholder="VIN" style="min-width:260px">
         <input id="miles" type="number" min="0" placeholder="Mileage">
-        <button class="btn primary" onclick="lookupVIN()">Lookup</button>
+        <button id="btnLookup" class="btn primary" onclick="lookupVIN()">Lookup</button>
       </div>
       <div id="vehicleBanner" class="muted" style="margin-top:8px"></div>
     </div>
@@ -748,24 +754,58 @@ function setText(id, v){ const el=document.getElementById(id); if(el) el.textCon
 function fmt(n){ return '$'+Number(n||0).toLocaleString(); }
 
 async async function lookupVIN(){
-  const vin = document.getElementById('vin').value.trim();
-  const miles = Number(document.getElementById('miles').value||0);
-  if(!vin) return;
-  // Decode basic via VPIC (through server evidence endpoint will also decode)
-  const dec = await fetch('/api/evidence/score',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vin})}).then(r=>r.json());
-  if(dec.ok){
-    vehicle = dec.vehicle || {};
-    document.getElementById('sVehicle').textContent = `${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}${miles?(' • '+miles.toLocaleString()+' mi'):''}`.trim();
-    document.getElementById('vehicleBanner').innerHTML = `<strong>${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}</strong>${vehicle.bodyClass?(' · '+vehicle.bodyClass):''}${miles?(' · '+miles.toLocaleString()+' mi'):''}`;
-    // evidence from this call
-    renderEvidence(dec);
+  const btn = document.getElementById('btnLookup');
+  try{
+    if(btn){ btn.disabled = true; btn.textContent = 'Looking up…'; }
+    const vin = (document.getElementById('vin')||{value:''}).value.trim();
+    const miles = Number((document.getElementById('miles')||{value:0}).value||0);
+    if(!vin){ alert('Enter a VIN'); return; }
+    // Quick server health check (optional)
+    try { await fetch('/api/health').then(r=>r.json()); } catch(e){ console.warn('Health check failed', e); }
+
+    const res = await fetch('/api/evidence/score', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ vin })
+    });
+    if(!res.ok){ throw new Error('Server error '+res.status); }
+    const dec = await res.json();
+    if(!dec.ok){ throw new Error(dec.error || 'VIN decode failed'); }
+
+    window.vehicle = dec.vehicle || {};
+    const t = `${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}${miles?(' • '+miles.toLocaleString()+' mi'):''}`.trim();
+    const banner = document.getElementById('vehicleBanner');
+    if (banner){ banner.innerHTML = `<strong>${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}</strong>${vehicle.bodyClass?(' · '+vehicle.bodyClass):''}${miles?(' · '+miles.toLocaleString()+' mi'):''}`; }
+    const chip = document.getElementById('sVehicle'); if(chip) chip.textContent = t;
+
+    // Render risks from this call
+    if (typeof renderEvidence === 'function'){ renderEvidence(dec); }
+
+    // Fetch maintenance stub
+    try {
+      const m = await fetch(`/api/maintenance/${vin}`).then(r=>r.json());
+      document.getElementById('intervals') && (document.getElementById('intervals').innerHTML = Object.entries(m.intervals||{}).map(([k,v])=>`<li><strong>${k}</strong>: ${v}</li>`).join(''));
+    } catch(e){ console.warn('Maintenance fetch failed', e); }
+
+    // Advance steps
+    document.getElementById('step2') && (document.getElementById('step2').style.display='block');
+    document.getElementById('step3') && (document.getElementById('step3').style.display='block');
+    document.getElementById('step4') && (document.getElementById('step4').style.display='block');
+
+    // Recalc
+    if (typeof refreshOffer === 'function') refreshOffer();
+  }catch(e){
+    console.error('Lookup error:', e);
+    alert('Lookup failed: '+ (e && e.message ? e.message : e));
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = 'Lookup'; }
   }
-  const maint = await fetch(`/api/maintenance/${vin}`).then(r=>r.json());
-  document.getElementById('step3').style.display='block';
-  document.getElementById('step4').style.display='block';
-  // Auto refresh offer after each stage
-  refreshOffer();
 }
+
+// Also bind click by id to be extra safe
+document.addEventListener('DOMContentLoaded', ()=>{
+  const b = document.getElementById('btnLookup');
+  if (b) b.addEventListener('click', (ev)=>{ ev.preventDefault(); try{ lookupVIN(); }catch(e){ console.error(e); } });
+});
 
 function renderEvidence(res){
   document.getElementById('riskCounts').textContent = `Recalls ${res.counts?.recalls||0} • Complaints ${res.counts?.complaints||0} • TSBs ${res.counts?.tsbs||0}`;
@@ -1121,6 +1161,8 @@ function applyWeightedRetail(){
   refreshOffer();
 }
 
+
+window.addEventListener('error', (e)=>{ console.error('JS error', e.error||e.message); });
 </script>
 </body>
 </html>
