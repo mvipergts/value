@@ -747,7 +747,7 @@ let vehicle = {}; let maintItems = []; let reconItems = []; let carfaxSummary={}
 function setText(id, v){ const el=document.getElementById(id); if(el) el.textContent=v; }
 function fmt(n){ return '$'+Number(n||0).toLocaleString(); }
 
-async function lookupVIN(){
+async async function lookupVIN(){
   const vin = document.getElementById('vin').value.trim();
   const miles = Number(document.getElementById('miles').value||0);
   if(!vin) return;
@@ -838,7 +838,7 @@ function renderCarfaxPretty(sum){
 }
 
 function refreshOffer(){
-  const retailBase = 10000; // placeholder value source
+  const retailBase = (window._retailBase||10000); // from comps or placeholder
   const wholesaleBase = 9040; // placeholder value source
   const maintDeduction = maintItems.reduce((s,i)=>s+(i.amount||0),0);
   let reconTotal = reconItems.reduce((s,i)=>s+(i.amount||0),0);
