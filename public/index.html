@@ -1,1541 +1,179 @@
 <!doctype html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Car Value, History & Maintenance — Pro v6.2.7</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Car Value, History & Maintenance Tool</title>
   <style>
-:root{ --bg:#f7fafc; --surface:#fff; --card:#fff; --text:#0f172a; --muted:#475569; --primary:#2563eb; --border:#d6e0ee; --accent:#e2e8f0; --green:#10b981; --amber:#f59e0b; --indigo:#6366f1; }
-*{ box-sizing:border-box; }
-body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color:var(--text); background:var(--bg); }
-.wrap{ max-width:1200px; margin:20px auto; padding:0 16px; }
-h1{ margin:0 0 14px; }
-.muted{ color:var(--muted); }
-.card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px; box-shadow:0 2px 10px rgba(12,28,70,.06); }
-.btn{ background:#fff; border:1px solid var(--border); border-radius:10px; padding:10px 14px; box-shadow:0 2px 10px rgba(12,28,70,.06); cursor:pointer; font-weight:600; }
-.btn.primary{ background:var(--primary); border-color:var(--primary); color:#fff; }
-.btn:disabled{ opacity:.6; cursor:not-allowed; }
-input,select{ border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
-.stat{ display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--accent); }
-.stat:last-child{ border-bottom:none; }
-.grid{ display:grid; grid-template-columns: repeat(3,1fr); gap:14px; }
-.grid.grid-3{ grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,0.85fr); align-items:start; }
-@media (max-width:1200px){ .grid.grid-3{ grid-template-columns:1fr; } }
-.grid>.card, .grid.grid-3>.card{ min-width:0; }
-.grow{ flex:1 1 0; min-width:0; }
-.risks{ max-height:560px; overflow:auto; word-break:break-word; }
-.risks details{ border:1px dashed var(--accent); border-radius:10px; padding:6px 8px; margin:6px 0; background:#fff; }
-.risks summary{ cursor:pointer; }
-.sticky{ position:sticky; top:0; z-index:10; background:rgba(247,250,252,.9); backdrop-filter:saturate(180%) blur(6px); padding:8px 0; border-bottom:1px solid var(--border); }
-.badge{ display:inline-block; padding:6px 10px; border-radius:999px; background:#fff; border:1px solid var(--border); margin-right:8px; box-shadow:0 1px 6px rgba(0,0,0,.05); }
-  
-/* modes */
-body.mode-customer .internal-only{ display:none !important; }
-body.mode-internal .customer-only{ display:none !important; }
-
-/* print styles */
-@media print{
-  .no-print{ display:none !important; }
-  body{ background:#fff !important; }
-  .card{ box-shadow:none !important; border-color:#bbb !important; }
-  .badge{ border-color:#bbb !important; background:#fff !important; }
-  a{ color:#000 !important; text-decoration:none; }
-  .muted{ color:#333 !important; }
-}
-
-/* contributions bar */
-.contrib-bar{ display:flex; height:10px; border-radius:6px; overflow:hidden; border:1px solid var(--border); }
-.contrib-seg{ height:100%; }
-
-</style>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.min.js">
-async function readFileArrayBuffer(f){
-  return new Promise((resolve,reject)=>{
-    const r = new FileReader();
-    r.onload = ()=> resolve(r.result);
-    r.onerror = reject;
-    r.readAsArrayBuffer(f);
-  });
-}
-document.getElementById('carfaxFile')?.addEventListener('change', (e)=>{
-  const f = e.target.files?.[0];
-  window._cfFile = f || null;
-  document.getElementById('cfSelected').textContent = f ? `Selected: ${f.name}` : 'No file selected.';
-});
-
-async function extractCarfax(){
-  try{
-    const f = window._cfFile;
-    if(!f){ alert('Pick a PDF first.'); return; }
-    const buf = await readFileArrayBuffer(f);
-    const pdf = await pdfjsLib.getDocument({data: buf}).promise;
-    let text = '';
-    const maxPages = Math.min(pdf.numPages, 12);
-    for (let i=1;i<=maxPages;i++){
-      const page = await pdf.getPage(i);
-      const tc = await page.getTextContent();
-      const line = tc.items.map(it=>it.str).join(' ');
-      text += line + '\n';
-    }
-    document.getElementById('carfaxText').value = text.trim();
-    showStep(3); // advance
-  }catch(e){
-    console.warn('PDF extract failed', e);
-    alert('Could not extract text. Try OCR instead.');
-  }
-}
-
-async function ocrCarfax(){
-  try{
-    const f = window._cfFile;
-    if(!f){ alert('Pick a PDF or image first.'); return; }
-    // If image, OCR directly; if PDF, rasterize first page and OCR first 3 pages
-    let text = '';
-    if (f.type.startsWith('image/')){
-      const url = URL.createObjectURL(f);
-      const { data:{ text: out } } = await Tesseract.recognize(url, 'eng');
-      text = out;
-      URL.revokeObjectURL(url);
-    } else {
-      const buf = await readFileArrayBuffer(f);
-      const pdf = await pdfjsLib.getDocument({data: buf}).promise;
-      const maxPages = Math.min(pdf.numPages, 3);
-      for (let i=1;i<=maxPages;i++){
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 1.6 });
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = viewport.width; canvas.height = viewport.height;
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        const dataURL = canvas.toDataURL('image/png');
-        const { data:{ text: out } } = await Tesseract.recognize(dataURL, 'eng');
-        text += out + '\n';
-      }
-    }
-    document.getElementById('carfaxText').value = text.trim();
-    showStep(3);
-  }catch(e){
-    console.warn('OCR failed', e);
-    alert('OCR failed. You can paste Carfax text manually.');
-  }
-}
-
-async function submitCarfax(){
-  const text = document.getElementById('carfaxText').value.trim();
-  if(!text){ alert('Add Carfax text first (extract/ocr/paste).'); return; }
-  const res = await fetch('/api/carfax/upload',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text }) }).then(r=>r.json());
-  if(!res.ok){ alert('Carfax parse failed.'); return; }
-  window.carfaxSummary = res.summary||{};
-  document.getElementById('proofCarfax').textContent = JSON.stringify(window.carfaxSummary,null,2);
-  if (typeof renderCarfaxPretty === 'function') renderCarfaxPretty(window.carfaxSummary);
-  // Optionally refresh offer after Carfax influences maintenance
-  refreshOffer();
-  showStep(3);
-} 
-
-// Extend lookupVIN to reveal Step 2 after decode
-const _origLookup = lookupVIN;
-lookupVIN = async function(){
-  await _origLookup();
-  document.getElementById('step2').style.display='block';
-}
-
-function showStep(n){
-  const ids = ['step1','step2','step3','step4'];
-  ids.forEach(id=>{ const el=document.getElementById(id); if(!el) return; if(id==='step'+n) el.scrollIntoView({behavior:'smooth', block:'start'}); });
-}
-
-// --- PDF mode + print helpers ---
-function setPdfMode(mode){
-  document.body.classList.remove('mode-customer','mode-internal');
-  document.body.classList.add(mode==='internal' ? 'mode-internal' : 'mode-customer');
-  const sel = document.getElementById('pdfMode'); if(sel) sel.value = (mode==='internal'?'internal':'customer');
-}
-function printCustomer(){ setPdfMode('customer'); window.print(); }
-function printInternal(){ setPdfMode('internal'); window.print(); }
-setPdfMode('customer');
-
-// --- Condition grade ---
-window._condition = 'B'; // default
-const COND = {
-  A: { label:'Excellent', recon:0.80, risk:0.80 },
-  B: { label:'Average',   recon:1.00, risk:1.00 },
-  C: { label:'Rough',     recon:1.30, risk:1.20 }
-};
-function setCondition(g){
-  window._condition = (g==='A'||g==='B'||g==='C')? g : 'B';
-  ['condA','condB','condC'].forEach(id=>{ const el=document.getElementById(id); if(!el) return; el.classList.remove('primary'); });
-  const el = document.getElementById('cond'+window._condition); if(el) el.classList.add('primary');
-  refreshOffer();
-}
-
-// --- Weighted retail ---
-function applyWeightedRetail(){
-  const sources = [];
-  const wSold = Number(document.getElementById('wSold').value||0);
-  const wCars = Number(document.getElementById('wCars').value||0);
-  const wKbb  = Number(document.getElementById('wKbb').value||0);
-  const wBb   = Number(document.getElementById('wBb').value||0);
-  const wMan  = Number(document.getElementById('wMan').value||0);
-  const vSold = Number(window._lastSoldMedian||0);
-  const vCars = Number(window._carsMedian||0);
-  const vKbb  = Number((document.getElementById('kbbRetail')||{value:0}).value||0);
-  const vBb   = Number((document.getElementById('bbRetail')||{value:0}).value||0);
-  const vMan  = Number((document.getElementById('manRetail')||{value:0}).value||0);
-  if (vSold && wSold) sources.push({id:'Sold', w:wSold, v:vSold});
-  if (vCars && wCars) sources.push({id:'Cars', w:wCars, v:vCars});
-  if (vKbb  && wKbb ) sources.push({id:'KBB',  w:wKbb,  v:vKbb });
-  if (vBb   && wBb  ) sources.push({id:'BB',   w:wBb,   v:vBb  });
-  if (vMan  && wMan ) sources.push({id:'Manual',w:wMan, v:vMan});
-
-  if (!sources.length){ alert('Provide at least one source value.'); return; }
-  const sumW = sources.reduce((s,x)=>s+x.w,0) || 1;
-  const contribs = sources.map(s=>({id:s.id, pct: (s.w/sumW)*100, part: s.w/sumW*s.v}));
-  const blended = Math.round(contribs.reduce((s,x)=>s+x.part,0));
-
-  // Update UI
-  document.getElementById('weightedOut').textContent = fmt(blended);
-  const byId = Object.fromEntries(contribs.map(c=>[c.id,c]));
-  const setW = (id, pct)=>{ const el=document.getElementById(id); if(el) el.style.width = (pct||0)+'%'; };
-  setW('contribSold', byId.Sold?.pct||0);
-  setW('contribCars', byId.Cars?.pct||0);
-  setW('contribKbb',  byId.KBB?.pct||0);
-  setW('contribBb',   byId.BB?.pct||0);
-  setW('contribMan',  byId.Manual?.pct||0);
-  document.getElementById('weightedExplain').textContent = sources.map(s=>`${s.id} (${Math.round((s.w/sumW)*100)}%) × ${fmt(s.v)}`).join(' + ');
-
-  // Apply as current retail base
-  window._retailBase = blended;
-  refreshOffer();
-}
-
-
-window.addEventListener('error', (e)=>{ console.error('JS error', e.error||e.message); });
-// Diagnostics + robust bindings
-function setBadge(id, txt){ const el=document.getElementById(id); if(el) el.textContent = txt; }
-async function pingServer(){
-  try{ const r=await fetch('/api/health'); if(!r.ok) throw new Error(r.status); const j=await r.json(); setBadge('diagSrv','Server: OK'); }
-  catch(e){ setBadge('diagSrv','Server: DOWN'); }
-}
-function initApp(){
-  setBadge('diagJs','JS: Ready');
-  pingServer();
-  // Delegated click for Lookup
-  document.body.addEventListener('click', (ev)=>{
-    const act = ev.target.closest('[data-action="lookup"]');
-    if(act){ ev.preventDefault(); try{ lookupVIN(); }catch(e){ console.error(e); } }
-  });
-  // Enter on VIN triggers lookup
-  const vinI = document.getElementById('vin');
-  if (vinI){
-    vinI.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); lookupVIN(); } });
-  }
-}
-document.addEventListener('DOMContentLoaded', initApp);
-window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled rejection', e.reason); alert('Error: '+(e.reason&&e.reason.message?e.reason.message:e.reason)); });
-
-
-function setStatus(msg){ const el=document.getElementById('statusLine'); if(el) el.textContent = msg||''; }
-
-function openSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='flex'; loadSettingsIntoModal(); } }
-function closeSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='none'; } }
-async function loadSettingsIntoModal(){
-  try{
-    const r = await fetch('/api/settings'); const j = await r.json();
-    if(j.ok){
-      const s = j.settings||{};
-      document.getElementById('setProfit').value = s.desiredProfit ?? 2000;
-      document.getElementById('setDoc').value = s.docFee ?? 200;
-      document.getElementById('setHold').value = s.holdingPercent ?? 0.02;
-      document.getElementById('setRisk').value = s.riskReservePerRecall ?? 80;
-    }
-  }catch(e){ console.warn('load settings failed', e); }
-}
-async function saveSettings(){
-  const body = {
-    desiredProfit: Number(document.getElementById('setProfit').value||0),
-    docFee: Number(document.getElementById('setDoc').value||0),
-    holdingPercent: Number(document.getElementById('setHold').value||0),
-    riskReservePerRecall: Number(document.getElementById('setRisk').value||0),
-  };
-  try{
-    const r = await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    const j = await r.json();
-    if(j.ok){ closeSettings(); if (typeof refreshOffer==='function') refreshOffer(); }
-    else alert('Save failed: '+(j.error||'unknown'));
-  }catch(e){ alert('Save failed'); }
-}
-// Close modal on background click
-document.addEventListener('click', (ev)=>{
-  const m=document.getElementById('settingsModal');
-  if(m && ev.target===m){ closeSettings(); }
-});
-</script>
-  <script>try { window.pdfjsLib = window['pdfjs-dist/build/pdf']; if (window.pdfjsLib && pdfjsLib.GlobalWorkerOptions) { pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.worker.min.js'; } } catch(e){ console.warn('PDF.js init failed', e); }
-async function readFileArrayBuffer(f){
-  return new Promise((resolve,reject)=>{
-    const r = new FileReader();
-    r.onload = ()=> resolve(r.result);
-    r.onerror = reject;
-    r.readAsArrayBuffer(f);
-  });
-}
-document.getElementById('carfaxFile')?.addEventListener('change', (e)=>{
-  const f = e.target.files?.[0];
-  window._cfFile = f || null;
-  document.getElementById('cfSelected').textContent = f ? `Selected: ${f.name}` : 'No file selected.';
-});
-
-async function extractCarfax(){
-  try{
-    const f = window._cfFile;
-    if(!f){ alert('Pick a PDF first.'); return; }
-    const buf = await readFileArrayBuffer(f);
-    const pdf = await pdfjsLib.getDocument({data: buf}).promise;
-    let text = '';
-    const maxPages = Math.min(pdf.numPages, 12);
-    for (let i=1;i<=maxPages;i++){
-      const page = await pdf.getPage(i);
-      const tc = await page.getTextContent();
-      const line = tc.items.map(it=>it.str).join(' ');
-      text += line + '\n';
-    }
-    document.getElementById('carfaxText').value = text.trim();
-    showStep(3); // advance
-  }catch(e){
-    console.warn('PDF extract failed', e);
-    alert('Could not extract text. Try OCR instead.');
-  }
-}
-
-async function ocrCarfax(){
-  try{
-    const f = window._cfFile;
-    if(!f){ alert('Pick a PDF or image first.'); return; }
-    // If image, OCR directly; if PDF, rasterize first page and OCR first 3 pages
-    let text = '';
-    if (f.type.startsWith('image/')){
-      const url = URL.createObjectURL(f);
-      const { data:{ text: out } } = await Tesseract.recognize(url, 'eng');
-      text = out;
-      URL.revokeObjectURL(url);
-    } else {
-      const buf = await readFileArrayBuffer(f);
-      const pdf = await pdfjsLib.getDocument({data: buf}).promise;
-      const maxPages = Math.min(pdf.numPages, 3);
-      for (let i=1;i<=maxPages;i++){
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 1.6 });
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = viewport.width; canvas.height = viewport.height;
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        const dataURL = canvas.toDataURL('image/png');
-        const { data:{ text: out } } = await Tesseract.recognize(dataURL, 'eng');
-        text += out + '\n';
-      }
-    }
-    document.getElementById('carfaxText').value = text.trim();
-    showStep(3);
-  }catch(e){
-    console.warn('OCR failed', e);
-    alert('OCR failed. You can paste Carfax text manually.');
-  }
-}
-
-async function submitCarfax(){
-  const text = document.getElementById('carfaxText').value.trim();
-  if(!text){ alert('Add Carfax text first (extract/ocr/paste).'); return; }
-  const res = await fetch('/api/carfax/upload',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text }) }).then(r=>r.json());
-  if(!res.ok){ alert('Carfax parse failed.'); return; }
-  window.carfaxSummary = res.summary||{};
-  document.getElementById('proofCarfax').textContent = JSON.stringify(window.carfaxSummary,null,2);
-  if (typeof renderCarfaxPretty === 'function') renderCarfaxPretty(window.carfaxSummary);
-  // Optionally refresh offer after Carfax influences maintenance
-  refreshOffer();
-  showStep(3);
-} 
-
-// Extend lookupVIN to reveal Step 2 after decode
-const _origLookup = lookupVIN;
-lookupVIN = async function(){
-  await _origLookup();
-  document.getElementById('step2').style.display='block';
-}
-
-function showStep(n){
-  const ids = ['step1','step2','step3','step4'];
-  ids.forEach(id=>{ const el=document.getElementById(id); if(!el) return; if(id==='step'+n) el.scrollIntoView({behavior:'smooth', block:'start'}); });
-}
-
-// --- PDF mode + print helpers ---
-function setPdfMode(mode){
-  document.body.classList.remove('mode-customer','mode-internal');
-  document.body.classList.add(mode==='internal' ? 'mode-internal' : 'mode-customer');
-  const sel = document.getElementById('pdfMode'); if(sel) sel.value = (mode==='internal'?'internal':'customer');
-}
-function printCustomer(){ setPdfMode('customer'); window.print(); }
-function printInternal(){ setPdfMode('internal'); window.print(); }
-setPdfMode('customer');
-
-// --- Condition grade ---
-window._condition = 'B'; // default
-const COND = {
-  A: { label:'Excellent', recon:0.80, risk:0.80 },
-  B: { label:'Average',   recon:1.00, risk:1.00 },
-  C: { label:'Rough',     recon:1.30, risk:1.20 }
-};
-function setCondition(g){
-  window._condition = (g==='A'||g==='B'||g==='C')? g : 'B';
-  ['condA','condB','condC'].forEach(id=>{ const el=document.getElementById(id); if(!el) return; el.classList.remove('primary'); });
-  const el = document.getElementById('cond'+window._condition); if(el) el.classList.add('primary');
-  refreshOffer();
-}
-
-// --- Weighted retail ---
-function applyWeightedRetail(){
-  const sources = [];
-  const wSold = Number(document.getElementById('wSold').value||0);
-  const wCars = Number(document.getElementById('wCars').value||0);
-  const wKbb  = Number(document.getElementById('wKbb').value||0);
-  const wBb   = Number(document.getElementById('wBb').value||0);
-  const wMan  = Number(document.getElementById('wMan').value||0);
-  const vSold = Number(window._lastSoldMedian||0);
-  const vCars = Number(window._carsMedian||0);
-  const vKbb  = Number((document.getElementById('kbbRetail')||{value:0}).value||0);
-  const vBb   = Number((document.getElementById('bbRetail')||{value:0}).value||0);
-  const vMan  = Number((document.getElementById('manRetail')||{value:0}).value||0);
-  if (vSold && wSold) sources.push({id:'Sold', w:wSold, v:vSold});
-  if (vCars && wCars) sources.push({id:'Cars', w:wCars, v:vCars});
-  if (vKbb  && wKbb ) sources.push({id:'KBB',  w:wKbb,  v:vKbb });
-  if (vBb   && wBb  ) sources.push({id:'BB',   w:wBb,   v:vBb  });
-  if (vMan  && wMan ) sources.push({id:'Manual',w:wMan, v:vMan});
-
-  if (!sources.length){ alert('Provide at least one source value.'); return; }
-  const sumW = sources.reduce((s,x)=>s+x.w,0) || 1;
-  const contribs = sources.map(s=>({id:s.id, pct: (s.w/sumW)*100, part: s.w/sumW*s.v}));
-  const blended = Math.round(contribs.reduce((s,x)=>s+x.part,0));
-
-  // Update UI
-  document.getElementById('weightedOut').textContent = fmt(blended);
-  const byId = Object.fromEntries(contribs.map(c=>[c.id,c]));
-  const setW = (id, pct)=>{ const el=document.getElementById(id); if(el) el.style.width = (pct||0)+'%'; };
-  setW('contribSold', byId.Sold?.pct||0);
-  setW('contribCars', byId.Cars?.pct||0);
-  setW('contribKbb',  byId.KBB?.pct||0);
-  setW('contribBb',   byId.BB?.pct||0);
-  setW('contribMan',  byId.Manual?.pct||0);
-  document.getElementById('weightedExplain').textContent = sources.map(s=>`${s.id} (${Math.round((s.w/sumW)*100)}%) × ${fmt(s.v)}`).join(' + ');
-
-  // Apply as current retail base
-  window._retailBase = blended;
-  refreshOffer();
-}
-
-
-window.addEventListener('error', (e)=>{ console.error('JS error', e.error||e.message); });
-// Diagnostics + robust bindings
-function setBadge(id, txt){ const el=document.getElementById(id); if(el) el.textContent = txt; }
-async function pingServer(){
-  try{ const r=await fetch('/api/health'); if(!r.ok) throw new Error(r.status); const j=await r.json(); setBadge('diagSrv','Server: OK'); }
-  catch(e){ setBadge('diagSrv','Server: DOWN'); }
-}
-function initApp(){
-  setBadge('diagJs','JS: Ready');
-  pingServer();
-  // Delegated click for Lookup
-  document.body.addEventListener('click', (ev)=>{
-    const act = ev.target.closest('[data-action="lookup"]');
-    if(act){ ev.preventDefault(); try{ lookupVIN(); }catch(e){ console.error(e); } }
-  });
-  // Enter on VIN triggers lookup
-  const vinI = document.getElementById('vin');
-  if (vinI){
-    vinI.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); lookupVIN(); } });
-  }
-}
-document.addEventListener('DOMContentLoaded', initApp);
-window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled rejection', e.reason); alert('Error: '+(e.reason&&e.reason.message?e.reason.message:e.reason)); });
-
-
-function setStatus(msg){ const el=document.getElementById('statusLine'); if(el) el.textContent = msg||''; }
-
-function openSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='flex'; loadSettingsIntoModal(); } }
-function closeSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='none'; } }
-async function loadSettingsIntoModal(){
-  try{
-    const r = await fetch('/api/settings'); const j = await r.json();
-    if(j.ok){
-      const s = j.settings||{};
-      document.getElementById('setProfit').value = s.desiredProfit ?? 2000;
-      document.getElementById('setDoc').value = s.docFee ?? 200;
-      document.getElementById('setHold').value = s.holdingPercent ?? 0.02;
-      document.getElementById('setRisk').value = s.riskReservePerRecall ?? 80;
-    }
-  }catch(e){ console.warn('load settings failed', e); }
-}
-async function saveSettings(){
-  const body = {
-    desiredProfit: Number(document.getElementById('setProfit').value||0),
-    docFee: Number(document.getElementById('setDoc').value||0),
-    holdingPercent: Number(document.getElementById('setHold').value||0),
-    riskReservePerRecall: Number(document.getElementById('setRisk').value||0),
-  };
-  try{
-    const r = await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    const j = await r.json();
-    if(j.ok){ closeSettings(); if (typeof refreshOffer==='function') refreshOffer(); }
-    else alert('Save failed: '+(j.error||'unknown'));
-  }catch(e){ alert('Save failed'); }
-}
-// Close modal on background click
-document.addEventListener('click', (ev)=>{
-  const m=document.getElementById('settingsModal');
-  if(m && ev.target===m){ closeSettings(); }
-});
-</script>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js">
-async function readFileArrayBuffer(f){
-  return new Promise((resolve,reject)=>{
-    const r = new FileReader();
-    r.onload = ()=> resolve(r.result);
-    r.onerror = reject;
-    r.readAsArrayBuffer(f);
-  });
-}
-document.getElementById('carfaxFile')?.addEventListener('change', (e)=>{
-  const f = e.target.files?.[0];
-  window._cfFile = f || null;
-  document.getElementById('cfSelected').textContent = f ? `Selected: ${f.name}` : 'No file selected.';
-});
-
-async function extractCarfax(){
-  try{
-    const f = window._cfFile;
-    if(!f){ alert('Pick a PDF first.'); return; }
-    const buf = await readFileArrayBuffer(f);
-    const pdf = await pdfjsLib.getDocument({data: buf}).promise;
-    let text = '';
-    const maxPages = Math.min(pdf.numPages, 12);
-    for (let i=1;i<=maxPages;i++){
-      const page = await pdf.getPage(i);
-      const tc = await page.getTextContent();
-      const line = tc.items.map(it=>it.str).join(' ');
-      text += line + '\n';
-    }
-    document.getElementById('carfaxText').value = text.trim();
-    showStep(3); // advance
-  }catch(e){
-    console.warn('PDF extract failed', e);
-    alert('Could not extract text. Try OCR instead.');
-  }
-}
-
-async function ocrCarfax(){
-  try{
-    const f = window._cfFile;
-    if(!f){ alert('Pick a PDF or image first.'); return; }
-    // If image, OCR directly; if PDF, rasterize first page and OCR first 3 pages
-    let text = '';
-    if (f.type.startsWith('image/')){
-      const url = URL.createObjectURL(f);
-      const { data:{ text: out } } = await Tesseract.recognize(url, 'eng');
-      text = out;
-      URL.revokeObjectURL(url);
-    } else {
-      const buf = await readFileArrayBuffer(f);
-      const pdf = await pdfjsLib.getDocument({data: buf}).promise;
-      const maxPages = Math.min(pdf.numPages, 3);
-      for (let i=1;i<=maxPages;i++){
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 1.6 });
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = viewport.width; canvas.height = viewport.height;
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        const dataURL = canvas.toDataURL('image/png');
-        const { data:{ text: out } } = await Tesseract.recognize(dataURL, 'eng');
-        text += out + '\n';
-      }
-    }
-    document.getElementById('carfaxText').value = text.trim();
-    showStep(3);
-  }catch(e){
-    console.warn('OCR failed', e);
-    alert('OCR failed. You can paste Carfax text manually.');
-  }
-}
-
-async function submitCarfax(){
-  const text = document.getElementById('carfaxText').value.trim();
-  if(!text){ alert('Add Carfax text first (extract/ocr/paste).'); return; }
-  const res = await fetch('/api/carfax/upload',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text }) }).then(r=>r.json());
-  if(!res.ok){ alert('Carfax parse failed.'); return; }
-  window.carfaxSummary = res.summary||{};
-  document.getElementById('proofCarfax').textContent = JSON.stringify(window.carfaxSummary,null,2);
-  if (typeof renderCarfaxPretty === 'function') renderCarfaxPretty(window.carfaxSummary);
-  // Optionally refresh offer after Carfax influences maintenance
-  refreshOffer();
-  showStep(3);
-} 
-
-// Extend lookupVIN to reveal Step 2 after decode
-const _origLookup = lookupVIN;
-lookupVIN = async function(){
-  await _origLookup();
-  document.getElementById('step2').style.display='block';
-}
-
-function showStep(n){
-  const ids = ['step1','step2','step3','step4'];
-  ids.forEach(id=>{ const el=document.getElementById(id); if(!el) return; if(id==='step'+n) el.scrollIntoView({behavior:'smooth', block:'start'}); });
-}
-
-// --- PDF mode + print helpers ---
-function setPdfMode(mode){
-  document.body.classList.remove('mode-customer','mode-internal');
-  document.body.classList.add(mode==='internal' ? 'mode-internal' : 'mode-customer');
-  const sel = document.getElementById('pdfMode'); if(sel) sel.value = (mode==='internal'?'internal':'customer');
-}
-function printCustomer(){ setPdfMode('customer'); window.print(); }
-function printInternal(){ setPdfMode('internal'); window.print(); }
-setPdfMode('customer');
-
-// --- Condition grade ---
-window._condition = 'B'; // default
-const COND = {
-  A: { label:'Excellent', recon:0.80, risk:0.80 },
-  B: { label:'Average',   recon:1.00, risk:1.00 },
-  C: { label:'Rough',     recon:1.30, risk:1.20 }
-};
-function setCondition(g){
-  window._condition = (g==='A'||g==='B'||g==='C')? g : 'B';
-  ['condA','condB','condC'].forEach(id=>{ const el=document.getElementById(id); if(!el) return; el.classList.remove('primary'); });
-  const el = document.getElementById('cond'+window._condition); if(el) el.classList.add('primary');
-  refreshOffer();
-}
-
-// --- Weighted retail ---
-function applyWeightedRetail(){
-  const sources = [];
-  const wSold = Number(document.getElementById('wSold').value||0);
-  const wCars = Number(document.getElementById('wCars').value||0);
-  const wKbb  = Number(document.getElementById('wKbb').value||0);
-  const wBb   = Number(document.getElementById('wBb').value||0);
-  const wMan  = Number(document.getElementById('wMan').value||0);
-  const vSold = Number(window._lastSoldMedian||0);
-  const vCars = Number(window._carsMedian||0);
-  const vKbb  = Number((document.getElementById('kbbRetail')||{value:0}).value||0);
-  const vBb   = Number((document.getElementById('bbRetail')||{value:0}).value||0);
-  const vMan  = Number((document.getElementById('manRetail')||{value:0}).value||0);
-  if (vSold && wSold) sources.push({id:'Sold', w:wSold, v:vSold});
-  if (vCars && wCars) sources.push({id:'Cars', w:wCars, v:vCars});
-  if (vKbb  && wKbb ) sources.push({id:'KBB',  w:wKbb,  v:vKbb });
-  if (vBb   && wBb  ) sources.push({id:'BB',   w:wBb,   v:vBb  });
-  if (vMan  && wMan ) sources.push({id:'Manual',w:wMan, v:vMan});
-
-  if (!sources.length){ alert('Provide at least one source value.'); return; }
-  const sumW = sources.reduce((s,x)=>s+x.w,0) || 1;
-  const contribs = sources.map(s=>({id:s.id, pct: (s.w/sumW)*100, part: s.w/sumW*s.v}));
-  const blended = Math.round(contribs.reduce((s,x)=>s+x.part,0));
-
-  // Update UI
-  document.getElementById('weightedOut').textContent = fmt(blended);
-  const byId = Object.fromEntries(contribs.map(c=>[c.id,c]));
-  const setW = (id, pct)=>{ const el=document.getElementById(id); if(el) el.style.width = (pct||0)+'%'; };
-  setW('contribSold', byId.Sold?.pct||0);
-  setW('contribCars', byId.Cars?.pct||0);
-  setW('contribKbb',  byId.KBB?.pct||0);
-  setW('contribBb',   byId.BB?.pct||0);
-  setW('contribMan',  byId.Manual?.pct||0);
-  document.getElementById('weightedExplain').textContent = sources.map(s=>`${s.id} (${Math.round((s.w/sumW)*100)}%) × ${fmt(s.v)}`).join(' + ');
-
-  // Apply as current retail base
-  window._retailBase = blended;
-  refreshOffer();
-}
-
-
-window.addEventListener('error', (e)=>{ console.error('JS error', e.error||e.message); });
-// Diagnostics + robust bindings
-function setBadge(id, txt){ const el=document.getElementById(id); if(el) el.textContent = txt; }
-async function pingServer(){
-  try{ const r=await fetch('/api/health'); if(!r.ok) throw new Error(r.status); const j=await r.json(); setBadge('diagSrv','Server: OK'); }
-  catch(e){ setBadge('diagSrv','Server: DOWN'); }
-}
-function initApp(){
-  setBadge('diagJs','JS: Ready');
-  pingServer();
-  // Delegated click for Lookup
-  document.body.addEventListener('click', (ev)=>{
-    const act = ev.target.closest('[data-action="lookup"]');
-    if(act){ ev.preventDefault(); try{ lookupVIN(); }catch(e){ console.error(e); } }
-  });
-  // Enter on VIN triggers lookup
-  const vinI = document.getElementById('vin');
-  if (vinI){
-    vinI.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); lookupVIN(); } });
-  }
-}
-document.addEventListener('DOMContentLoaded', initApp);
-window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled rejection', e.reason); alert('Error: '+(e.reason&&e.reason.message?e.reason.message:e.reason)); });
-
-
-function setStatus(msg){ const el=document.getElementById('statusLine'); if(el) el.textContent = msg||''; }
-
-function openSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='flex'; loadSettingsIntoModal(); } }
-function closeSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='none'; } }
-async function loadSettingsIntoModal(){
-  try{
-    const r = await fetch('/api/settings'); const j = await r.json();
-    if(j.ok){
-      const s = j.settings||{};
-      document.getElementById('setProfit').value = s.desiredProfit ?? 2000;
-      document.getElementById('setDoc').value = s.docFee ?? 200;
-      document.getElementById('setHold').value = s.holdingPercent ?? 0.02;
-      document.getElementById('setRisk').value = s.riskReservePerRecall ?? 80;
-    }
-  }catch(e){ console.warn('load settings failed', e); }
-}
-async function saveSettings(){
-  const body = {
-    desiredProfit: Number(document.getElementById('setProfit').value||0),
-    docFee: Number(document.getElementById('setDoc').value||0),
-    holdingPercent: Number(document.getElementById('setHold').value||0),
-    riskReservePerRecall: Number(document.getElementById('setRisk').value||0),
-  };
-  try{
-    const r = await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    const j = await r.json();
-    if(j.ok){ closeSettings(); if (typeof refreshOffer==='function') refreshOffer(); }
-    else alert('Save failed: '+(j.error||'unknown'));
-  }catch(e){ alert('Save failed'); }
-}
-// Close modal on background click
-document.addEventListener('click', (ev)=>{
-  const m=document.getElementById('settingsModal');
-  if(m && ev.target===m){ closeSettings(); }
-});
-</script>
+    :root { --bg:#0b1220; --card:#121a2b; --text:#e6ecff; --muted:#9fb0d9; --accent:#4da3ff; --border:#27324a; }
+    *{ box-sizing:border-box; } body{ margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--text); }
+    header{ position:sticky; top:0; z-index:10; backdrop-filter:saturate(1.1) blur(6px); background:rgba(11,18,32,0.85); border-bottom:1px solid var(--border); }
+    .wrap{ max-width:1120px; margin:0 auto; padding:14px 16px; }
+    h1{ margin:4px 0 10px; font-size:22px; } h3{ margin:0 0 8px; } h4{ margin:0 0 8px; }
+    .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    input,select,textarea{ background:#0e1628; color:var(--text); border:1px solid var(--border); border-radius:10px; padding:8px 10px; }
+    .btn{ background:#16213a; border:1px solid var(--border); color:var(--text); border-radius:12px; padding:8px 12px; cursor:pointer; }
+    .btn.primary{ background:#2563eb; border-color:#1d4ed8; }
+    .badge{ display:inline-block; border:1px solid var(--border); padding:6px 10px; border-radius:999px; margin-left:6px; color:#cfe0ff; }
+    .grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+    .card{ background:var(--card); border:1px solid var(--border); border-radius:16px; padding:12px; box-shadow:0 2px 0 rgba(0,0,0,.2); }
+    .muted{ color:var(--muted); } .no-print{}
+    .contrib-bar{ display:flex; height:8px; overflow:hidden; border:1px solid var(--border); border-radius:6px; }
+    .contrib-seg{ height:100%; }
+    @media (max-width:900px){ .grid{ grid-template-columns:1fr; } }
+    body.mode-customer .internal-only{ display:none !important; }
+    @media print{ .no-print{ display:none !important; } body{ background:#fff; color:#000; } .card{ border-color:#bbb; box-shadow:none; } .muted{ color:#333; } }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.min.js"></script>
+  <script>try{window.pdfjsLib = window['pdfjs-dist/build/pdf']; if(pdfjsLib && pdfjsLib.GlobalWorkerOptions){ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.worker.min.js'; }}catch(e){console.warn('PDFjs init',e);}</script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
 </head>
-<body>
-  <div class="sticky">
-    <div class="wrap">
-      <span id="sVehicle" class="badge muted">Vehicle</span>
-      <span class="badge">Summary:</span>
-      <span class="badge">Retail: <span id="sumRetail">$0</span></span>
-      <span class="badge">Wholesale: <span id="sumWhole">$0</span></span>
-      <span class="badge">Maint: <span id="sumMaint">$0</span></span>
-      <span class="badge">Recon: <span id="sumRecon">$0</span></span>
-      <span class="badge">Risk: <span id="sumRisk">$0</span></span>
-      <span class="badge">Max Buy: <span id="sumMax">$0</span></span>
-<span class="badge" id="diagJs">JS: …</span>
-<span class="badge" id="diagSrv">Server: …</span>
-<span class="badge no-print">PDF mode: <select id="pdfMode" onchange="setPdfMode(this.value)"><option value="customer" selected>Customer</option><option value="internal">Internal</option></select></span>
-<button class="btn no-print" onclick="printCustomer()">Print Customer</button>
-<button class="btn no-print" onclick="printInternal()">Print Internal</button>
-<span class="badge no-print">Condition: <button id="condA" class="btn" onclick="setCondition('A')">A</button> <button id="condB" class="btn" onclick="setCondition('B')">B</button> <button id="condC" class="btn" onclick="setCondition('C')">C</button></span>
-      <button class="btn" onclick="openSettings()">Settings</button>
-      <button class="btn primary" onclick="window.print()">Print Customer PDF</button>
-    </div>
-  </div>
-
+<body class="mode-customer">
+<header>
   <div class="wrap">
-    <h1>Car Value, History & Maintenance — Pro v6.2.7</h1>
-
-    <!-- Step 1 -->
-    <div class="card" id="step1">
-      <h3>1) Identify</h3>
-      <form id="vinForm" onsubmit="event.preventDefault(); lookupVIN();" style="display:flex; gap:8px; flex-wrap:wrap">
-        <input id="vin" placeholder="VIN" style="min-width:260px">
-        <input id="miles" type="number" min="0" placeholder="Mileage">
-        <button id="btnLookup" class="btn primary" type="button" data-action="lookup" onclick="lookupVIN()">Lookup</button>
-      </form>
-      <div id="vehicleBanner" class="muted" style="margin-top:8px"></div>
-<div id="statusLine" class="muted" style="margin-top:6px"></div>
+    <h1>Car Value, History & Maintenance Tool</h1>
+    <div class="row">
+      <span class="badge">Vehicle: <span id="sVehicle">—</span></span>
+      <span class="badge">Max Buy: <span id="sumMax">$0</span></span>
+      <span class="badge" id="diagJs">JS: Ready</span>
+      <span class="badge" id="diagSrv">Server: …</span>
+      <span class="badge">PDF: 
+        <select id="pdfMode" onchange="setPdfMode(this.value)">
+          <option value="customer" selected>Customer</option>
+          <option value="internal">Internal</option>
+        </select>
+      </span>
+      <button class="btn no-print" onclick="openSettings()">Settings</button>
+      <button class="btn no-print" onclick="printCustomer()">Print Customer</button>
+      <button class="btn no-print" onclick="printInternal()">Print Internal</button>
     </div>
+  </div>
+</header>
 
-    <!-- Step 2 (Carfax) -->
-    <div class="card" id="step2" style="margin-top:14px; display:none">
-      <h3>2) Carfax</h3>
-      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-        <input id="carfaxFile" type="file" accept=".pdf,image/*">
-        <button class="btn" onclick="extractCarfax()">Extract Text</button>
-        <button class="btn" onclick="ocrCarfax()">Scan with OCR</button>
-        <button class="btn primary" onclick="submitCarfax()">Use Text</button>
-        <span id="cfSelected" class="muted">No file selected.</span>
+<main class="wrap" style="padding-top:10px">
+  <div class="card">
+    <h3>1) VIN & Mileage</h3>
+    <form id="vinForm" onsubmit="event.preventDefault(); lookupVIN();" class="row">
+      <input id="vin" placeholder="VIN" style="min-width:320px"/>
+      <input id="miles" placeholder="Mileage" type="number" min="0" style="width:160px"/>
+      <button id="btnLookup" class="btn primary" type="button" data-action="lookup" onclick="lookupVIN()">Lookup</button>
+      <button id="btnDemo" class="btn" type="button">Try Demo VIN</button>
+    </form>
+    <div id="vehicleBanner" class="muted" style="margin-top:8px"></div>
+    <div id="statusLine" class="muted" style="margin-top:6px"></div>
+    <div id="lookupDebug" class="muted" style="margin-top:4px; font-size:12px"></div>
+  </div>
+
+  <div class="card" id="step2" style="margin-top:14px; display:none">
+    <h3>2) Carfax</h3>
+    <div class="row">
+      <input id="carfaxFile" type="file" accept=".pdf,image/*">
+      <button class="btn" onclick="extractCarfax()">Extract Text</button>
+      <button class="btn" onclick="ocrCarfax()">Scan with OCR</button>
+      <button class="btn primary" onclick="submitCarfax()">Use Text</button>
+      <span id="cfSelected" class="muted">No file selected.</span>
+    </div>
+    <textarea id="carfaxText" placeholder="Carfax text here (auto-filled from PDF/OCR or paste manually)" style="width:100%; min-height:140px; margin-top:8px"></textarea>
+  </div>
+
+  <div class="card" id="step3" style="margin-top:14px; display:none">
+    <h3>3) Maintenance, Recon & Evidence</h3>
+    <div class="grid">
+      <div class="card">
+        <h4>Maintenance Deductions</h4>
+        <div id="maintList" class="muted">No items yet.</div>
+        <div class="row" style="margin-top:8px">
+          <input id="maintName" placeholder="Item (e.g., Oil change)">
+          <input id="maintAmt" type="number" min="0" placeholder="Amount">
+          <button class="btn" onclick="addMaint()">Add</button>
+        </div>
       </div>
-      <div style="margin-top:8px">
-        <textarea id="carfaxText" placeholder="Carfax text here (auto-filled from PDF/OCR or paste manually)" style="width:100%; min-height:140px"></textarea>
+      <div class="card">
+        <h4>Recon (Additional Costs)</h4>
+        <div class="row" style="flex-wrap:wrap">
+          <button class="btn" onclick="addRecon('Tires',800)">+ Tires</button>
+          <button class="btn" onclick="addRecon('Windshield',350)">+ Windshield</button>
+          <button class="btn" onclick="addRecon('Detail',200)">+ Detail</button>
+          <button class="btn" onclick="addRecon('Inspection',100)">+ Inspection</button>
+        </div>
+        <div id="reconList" class="muted" style="margin-top:6px">No items.</div>
+      </div>
+      <div class="card">
+        <h4>NHTSA + TSB Risk Overview</h4>
+        <div id="riskCounts" class="muted">Recalls: 0 Complaints: 0 TSBs: 0</div>
+        <div id="riskList" class="muted" style="margin-top:6px"></div>
       </div>
     </div>
-
-    <!-- Step 3 (Service & Recon) -->
-    <div class="card" id="step3" style="margin-top:14px; display:none">
-      <h3>3) Service & Recon</h3>
-      <div class="grid grid-3">
-        <div class="card">
-          <button class="btn primary" onclick="applyMaint()">Apply Maintenance (from Carfax)</button>
-          <button class="btn" onclick="getEvidence()">Get NHTSA + TSB Evidence</button>
-          <h4 style="margin-top:12px">Maintenance Deductions</h4>
-          <table style="width:100%">
-            <thead><tr><th align="left">Item</th><th align="left">Amount</th><th align="left">Why</th></tr></thead>
-            <tbody id="maintTable"></tbody>
-          </table>
-        </div>
-
-        <div class="card">
-          <form id="vinForm" onsubmit="event.preventDefault(); lookupVIN();" style="display:flex; gap:8px; flex-wrap:wrap">
-            <button class="btn">+ Tires</button>
-            <button class="btn">+ Windshield</button>
-            <button class="btn">+ Detail</button>
-            <button class="btn">+ Inspection</button>
-            <button class="btn">+ Alignment</button>
-            <button class="btn">+ Brakes</button>
-            <button class="btn">+ Battery</button>
-          </div>
-          <div style="display:flex; gap:8px; margin-top:8px">
-            <input id="reconLabel" class="grow" placeholder="Custom item">
-            <input id="reconAmt" class="grow" type="number" min="0" step="1" placeholder="Amount" style="max-width:220px">
-            <button class="btn" onclick="addRecon()">Add</button>
-          </div>
-          <table style="width:100%; margin-top:10px">
-            <thead><tr><th align="left">Item</th><th align="left">Cost</th></tr></thead>
-            <tbody id="reconTable"><tr><td class="muted">No additional costs.</td><td>$0</td></tr></tbody>
-          </table>
-        </div>
-
-        <div class="card risks">
-          <div class="badge muted" id="riskCounts">Recalls 0 • Complaints 0 • TSBs 0</div>
-          <button class="btn primary" style="margin-top:8px" onclick="applyRisks()">Apply Top Risks to Recon</button>
-          <div id="riskList" style="margin-top:8px" class="muted">No data yet.</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Step 4 (Offer) -->
-    <div class="card" id="step4" style="margin-top:14px; display:none">
-      <h3>4) Offer + Market Comps</h3>
-      <div class="grid">
-        <div class="card">
-          <h4>Numbers</h4>
-          <div class="stat"><span><strong>Retail</strong></span><span id="oRetail">$0</span></div>
-          <div class="stat"><span><strong>Wholesale</strong></span><span id="oWhole">$0</span></div>
-          <div class="stat"><span><strong>Maint. deduction</strong></span><span id="oMaint">$0</span></div>
-          <div class="stat"><span><strong>Wholesale (after)</strong></span><span id="oAdj">$0</span></div>
-          <div class="stat"><span><strong>Recon total</strong></span><span id="oRecon">$0</span></div>
-          <div class="stat"><span><strong>Risk reserve</strong></span><span id="oRisk">$0</span></div>
-          <div class="stat"><span><strong>Desired profit</strong></span><span id="oProfit">$0</span></div>
-          <div class="stat"><span><strong>Holding & fees</strong></span><span id="oHold">$0</span></div>
-          <div class="stat"><span><strong>Target Max Buy</strong></span><span id="oMax">$0</span></div>
-        </div>
-        <div class="card" id="ebayCard">
-          <h4>eBay Comps (Free)</h4>
-          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-            <input id="zip" placeholder="ZIP (optional)" style="width:140px">
-            <select id="radius">
-              <option value="100">100 mi</option>
-              <option value="250">250 mi</option>
-              <option value="500" selected>500 mi</option>
-            </select>
-          </div>
-          <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap">
-            <button class="btn" onclick="fetchEbay('sold')">Fetch SOLD</button>
-            <button class="btn" onclick="fetchEbay('active')">Fetch ACTIVE</button>
-            <button class="btn" onclick="useSoldMedian()">Use SOLD Median as Retail</button>
-          </div>
-          <div id="ebayStats" class="muted" style="margin-top:8px">—</div>
-          <details style="margin-top:6px"><summary>Sold list</summary><div id="soldList" class="muted">No results</div></details>
-          <details style="margin-top:6px"><summary>Active list</summary><div id="activeList" class="muted">No results</div></details>
-        </div>
-        <div class="card" id="carsCard">
-          <h4>Cars.com (Optional)</h4>
-          <div class="muted" style="margin-bottom:6px">Uses SerpAPI if <code>SERPAPI_KEY</code> is set. Otherwise, paste comps manually below.</div>
-          <form id="vinForm" onsubmit="event.preventDefault(); lookupVIN();" style="display:flex; gap:8px; flex-wrap:wrap">
-            <button class="btn" onclick="fetchSerp('cars')">Fetch Cars.com</button>
-            <button class="btn" onclick="useCarsMedian()">Use Cars.com Median as Retail</button>
-          </div>
-          <div id="carsStats" class="muted" style="margin-top:6px">—</div>
-          <details style="margin-top:6px"><summary>Results</summary><div id="carsList" class="muted">No results</div></details>
-          <details style="margin-top:6px"><summary>Paste comps (price - title - url)</summary>
-            <textarea id="carsManual" style="width:100%; min-height:100px"></textarea>
-            <div style="margin-top:6px"><button class="btn" onclick="parseCarsManual()">Parse</button></div>
-          </details>
-        </div>
-        <div class="card" id="fbCard">
-          <h4>Facebook Marketplace (Manual / Optional)</h4>
-          <div class="muted">Paste comps (no automated scraping here).</div>
-          <details open style="margin-top:6px"><summary>Paste comps</summary>
-            <textarea id="fbManual" style="width:100%; min-height:100px"></textarea>
-            <div style="margin-top:6px"><button class="btn" onclick="parseFbManual()">Parse</button> <button class="btn" onclick="useFbMedian()">Use FB Median as Retail</button></div>
-          </details>
-          <div id="fbStats" class="muted" style="margin-top:6px">—</div>
-          <details style="margin-top:6px"><summary>Results</summary><div id="fbList" class="muted">No results</div></details>
-        </div>
-        <div class="card" id="guideCard">
-          <h4>Guides: KBB / Black Book / Manual</h4>
-          <div class="muted">Enter guide numbers if you have them (or use manual).</div>
-          <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:8px">
-            <div class="card">
-              <h5>KBB</h5>
-              <div>Retail <input id="kbbRetail" type="number" min="0" style="width:140px"></div>
-              <div>Wholesale <input id="kbbWhole" type="number" min="0" style="width:140px"></div>
-            </div>
-            <div class="card">
-              <h5>Black Book</h5>
-              <div>Retail <input id="bbRetail" type="number" min="0" style="width:140px"></div>
-              <div>Wholesale <input id="bbWhole" type="number" min="0" style="width:140px"></div>
-            </div>
-          </div>
-          <div style="margin-top:8px">
-            <div>Manual Retail <input id="manRetail" type="number" min="0" style="width:160px"> 
-            <button class="btn" onclick="useGuidesWeighted()">Use Weighted Retail</button></div>
-            <div class="muted" style="margin-top:6px">Weights: SOLD median 0.5, Cars.com 0.2, KBB 0.15, Black Book 0.1, Manual 0.05 (only sources you provide are used).</div>
-          </div>
-        </div>
-        
-        <div class="card" id="weightsCard">
-          <h4>Weighted Retail</h4>
-          <div class="muted">Blend the sources you’ve fetched/entered. Move sliders to adjust weights (we normalize automatically across provided sources).</div>
-          <div style="display:grid; grid-template-columns:1fr 120px; gap:10px; align-items:center; margin-top:8px">
-            <label>eBay SOLD median</label><input id="wSold" type="range" min="0" max="100" value="50">
-            <label>Cars.com median</label><input id="wCars" type="range" min="0" max="100" value="20">
-            <label>KBB retail</label><input id="wKbb" type="range" min="0" max="100" value="15">
-            <label>Black Book retail</label><input id="wBb" type="range" min="0" max="100" value="10">
-            <label>Manual retail</label><input id="wMan" type="range" min="0" max="100" value="5">
-          </div>
-          <div style="margin-top:10px; display:flex; gap:8px; align-items:center">
-            <button class="btn" onclick="applyWeightedRetail()">Apply Weighted Retail</button>
-            <div class="muted">Result: <strong id="weightedOut">$0</strong></div>
-          </div>
-          <div class="contrib-bar" style="margin-top:8px">
-            <div id="contribSold" class="contrib-seg" style="background:#c7d2fe; width:0%"></div>
-            <div id="contribCars" class="contrib-seg" style="background:#a7f3d0; width:0%"></div>
-            <div id="contribKbb" class="contrib-seg" style="background:#fde68a; width:0%"></div>
-            <div id="contribBb" class="contrib-seg" style="background:#fca5a5; width:0%"></div>
-            <div id="contribMan" class="contrib-seg" style="background:#d1fae5; width:0%"></div>
-          </div>
-          <div id="weightedExplain" class="muted" style="margin-top:6px"></div>
-        </div>
-        <div class="card">
-          <h4>Proof</h4>
-          <div id="proofCarfaxPretty" class="card"></div>
-          <details><summary class="muted">Carfax summary (raw)</summary><pre id="proofCarfax" class="internal-only"></pre></details>
-          <details><summary class="muted">Evidence (raw)</summary><pre id="proofEvidence" class="internal-only"></pre></details>
-        </div>
-      </div>
+    <div class="card internal-only" style="margin-top:10px">
+      <details><summary>Carfax summary (raw)</summary><pre id="proofCarfax" class="internal-only">—</pre></details>
+      <details><summary>Evidence (raw)</summary><pre id="proofEvidence" class="internal-only">—</pre></details>
     </div>
   </div>
 
-<script>
-let vehicle = {}; let maintItems = []; let reconItems = []; let carfaxSummary={};
+  <div class="card" id="step4" style="margin-top:14px; display:none">
+    <h3>4) Offer + Market Comps</h3>
+    <div class="grid">
+      <div class="card">
+        <h4>Numbers</h4>
+        <div>Retail base: <strong id="numRetail">$10,000</strong></div>
+        <div>Wholesale base: <input id="numWholeBase" type="number" min="0" value="8000" style="width:140px"></div>
+        <div>Maintenance deduction: <strong id="numMaint">$0</strong></div>
+        <div>Recon total: <strong id="numRecon">$0</strong></div>
+        <div>Risk reserve: <strong id="numRisk">$0</strong></div>
+        <div class="muted" style="margin-top:6px">Desired profit, doc fee, holding % from Settings.</div>
+      </div>
 
-function setText(id, v){ const el=document.getElementById(id); if(el) el.textContent=v; }
-function fmt(n){ return '$'+Number(n||0).toLocaleString(); }
+      <div class="card" id="weightsCard">
+        <h4>Weighted Retail</h4>
+        <div class="muted">Blend sources and apply.</div>
+        <div class="row"><label style="width:160px">eBay SOLD</label><input id="wSold" type="range" min="0" max="100" value="50"></div>
+        <div class="row"><label style="width:160px">Cars.com</label><input id="wCars" type="range" min="0" max="100" value="20"></div>
+        <div class="row"><label style="width:160px">KBB</label><input id="wKbb" type="range" min="0" max="100" value="15"></div>
+        <div class="row"><label style="width:160px">Black Book</label><input id="wBb" type="range" min="0" max="100" value="10"></div>
+        <div class="row"><label style="width:160px">Manual</label><input id="wMan" type="range" min="0" max="100" value="5"></div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn" onclick="applyWeightedRetail()">Apply Weighted Retail</button>
+          <div class="muted">Result: <strong id="weightedOut">$0</strong></div>
+        </div>
+        <div class="contrib-bar" style="margin-top:8px">
+          <div id="contribSold" class="contrib-seg" style="background:#c7d2fe; width:0%"></div>
+          <div id="contribCars" class="contrib-seg" style="background:#a7f3d0; width:0%"></div>
+          <div id="contribKbb" class="contrib-seg" style="background:#fde68a; width:0%"></div>
+          <div id="contribBb" class="contrib-seg" style="background:#fca5a5; width:0%"></div>
+          <div id="contribMan" class="contrib-seg" style="background:#d1fae5; width:0%"></div>
+        </div>
+      </div>
 
-async async function lookupVIN(){
-  const btn = document.getElementById('btnLookup');
-  try{
-    if(btn){ btn.disabled = true; btn.textContent = 'Looking up…'; }
-    setStatus('Decoding VIN (VPIC)…');
-    const vin = (document.getElementById('vin')||{value:''}).value.trim();
-    const miles = Number((document.getElementById('miles')||{value:0}).value||0);
-    if(!vin){ alert('Enter a VIN'); setStatus('Enter a VIN'); return; }
+      <div class="card" id="ebayCard">
+        <h4>eBay Comps (Free)</h4>
+        <div class="row">
+          <input id="zip" placeholder="ZIP (optional)" style="width:140px">
+          <select id="radius"><option value="100">100 mi</option><option value="250">250 mi</option><option value="500" selected>500 mi</option></select>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn" onclick="fetchEbay('sold')">Fetch SOLD</button>
+          <button class="btn" onclick="fetchEbay('active')">Fetch ACTIVE</button>
+          <button class="btn" onclick="useSoldMedian()">Use SOLD Median as Retail</button>
+        </div>
+        <div id="ebayStats" class="muted" style="margin-top:6px">—</div>
+        <details style="margin-top:6px"><summary>Sold list</summary><div id="soldList" class="muted">No results</div></details>
+        <details style="margin-top:6px"><summary>Active list</summary><div id="activeList" class="muted">No results</div></details>
+      </div>
 
-    // 1) VPIC FIRST — instant banner
-    let vehicle = {};
-    try{
-      const r = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${encodeURIComponent(vin)}?format=json`);
-      const j = await r.json();
-      const row = j?.Results?.[0] || {};
-      vehicle = { year: row.ModelYear||null, make: row.Make||null, model: row.Model||null, bodyClass: row.BodyClass||null };
-      window.vehicle = vehicle;
-      const banner = document.getElementById('vehicleBanner');
-      const chip = document.getElementById('sVehicle');
-      const t = `${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}${miles?(' • '+miles.toLocaleString()+' mi'):''}`.trim();
-      if (chip) chip.textContent = t;
-      if (banner){ banner.innerHTML = `<strong>${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}</strong>${vehicle.bodyClass?(' · '+vehicle.bodyClass):''}${miles?(' · '+miles.toLocaleString()+' mi'):''}`; }
-      setStatus('Vehicle identified. Fetching evidence…');
-    }catch(e){
-      console.warn('VPIC failed', e);
-      setStatus('Could not decode via VPIC. Trying server evidence…');
-    }
+      <div class="card">
+        <h4>Proof</h4>
+        <details><summary>Carfax summary (raw)</summary><pre id="proofCarfax2" class="internal-only">—</pre></details>
+        <details><summary>Evidence (raw)</summary><pre id="proofEvidence2" class="internal-only">—</pre></details>
+      </div>
+    </div>
+  </div>
+</main>
 
-    // Reveal steps immediately so user can keep going
-    document.getElementById('step2') && (document.getElementById('step2').style.display='block');
-    document.getElementById('step3') && (document.getElementById('step3').style.display='block');
-    document.getElementById('step4') && (document.getElementById('step4').style.display='block');
-
-    // Kick off evidence fetch in background (do not block UI)
-    (async ()=>{
-      try{
-        const res = await fetch('/api/evidence/score', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin }) });
-        const dec = await res.json();
-        if(dec && dec.ok){
-          window.vehicle = dec.vehicle || window.vehicle || {};
-          if (typeof renderEvidence === 'function'){ renderEvidence(dec); }
-          setStatus('Evidence loaded.');
-        }else{
-          setStatus('Evidence fetch failed (server).');
-        }
-      }catch(e){ console.warn('Evidence fetch failed', e); setStatus('Evidence fetch failed.'); }
-    })();
-
-    // Kick off maintenance stub fetch (non-blocking)
-    (async ()=>{
-      try{
-        const m = await fetch(`/api/maintenance/${vin}`).then(r=>r.json());
-        const el = document.getElementById('intervals');
-        if (el) el.innerHTML = Object.entries(m.intervals||{}).map(([k,v])=>`<li><strong>${k}</strong>: ${v}</li>`).join('');
-      }catch(e){ /* ignore */ }
-    })();
-
-    if (typeof refreshOffer === 'function') refreshOffer();
-  }catch(e){
-    console.error('Lookup error:', e);
-    alert('Lookup failed: '+ (e && e.message ? e.message : e));
-    setStatus('Lookup failed.');
-  }finally{
-    if(btn){ btn.disabled = false; btn.textContent = 'Lookup'; }
-  }
-}
-
-// Ensure click binding
-document.addEventListener('DOMContentLoaded', ()=>{
-  const b = document.getElementById('btnLookup');
-  if (b) b.addEventListener('click', (ev)=>{ ev.preventDefault(); try{ lookupVIN(); }catch(e){ console.error(e); } });
-});
-    // Try server-side evidence first
-    let dec;
-    try{
-      const res = await fetch('/api/evidence/score', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ vin })
-      });
-      if(!res.ok) throw new Error('Server returned '+res.status);
-      dec = await res.json();
-      if(!dec.ok) throw new Error(dec.error || 'VIN decode failed');
-      setStatus('Server decode OK.');
-    }catch(e){
-      // Client-side fallback to VPIC
-      setStatus('Server decode failed, trying VPIC…');
-      try{
-        const r = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${encodeURIComponent(vin)}?format=json`);
-        const j = await r.json();
-        const row = j?.Results?.[0] || {};
-        dec = { ok:true, vehicle:{ year: row.ModelYear||null, make: row.Make||null, model: row.Model||null, bodyClass: row.BodyClass||null }, counts:{recalls:0, complaints:0, tsbs:0}, topRisks:[] };
-        setStatus('VPIC decode OK (fallback).');
-      }catch(e2){
-        console.error('Both server and VPIC failed', e, e2);
-        alert('Lookup failed (server & VPIC). Check network.');
-        setStatus('Lookup failed.');
-        return;
-      }
-    }
-
-    window.vehicle = dec.vehicle || {};
-    const t = `${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}${miles?(' • '+miles.toLocaleString()+' mi'):''}`.trim();
-    const banner = document.getElementById('vehicleBanner');
-    if (banner){ banner.innerHTML = `<strong>${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}</strong>${vehicle.bodyClass?(' · '+vehicle.bodyClass):''}${miles?(' · '+miles.toLocaleString()+' mi'):''}`; }
-    const chip = document.getElementById('sVehicle'); if(chip) chip.textContent = t;
-
-    // Render risks if present
-    if (typeof renderEvidence === 'function'){ renderEvidence(dec); }
-
-    // Fetch maintenance stub (non-blocking)
-    try {
-      const m = await fetch(`/api/maintenance/${vin}`).then(r=>r.json());
-      document.getElementById('intervals') && (document.getElementById('intervals').innerHTML = Object.entries(m.intervals||{}).map(([k,v])=>`<li><strong>${k}</strong>: ${v}</li>`).join(''));
-    } catch(e){ console.warn('Maintenance fetch failed', e); }
-
-    // Reveal steps
-    document.getElementById('step2') && (document.getElementById('step2').style.display='block');
-    document.getElementById('step3') && (document.getElementById('step3').style.display='block');
-    document.getElementById('step4') && (document.getElementById('step4').style.display='block');
-    setStatus('Lookup complete.');
-
-    if (typeof refreshOffer === 'function') refreshOffer();
-  }catch(e){
-    console.error('Lookup error:', e);
-    alert('Lookup failed: '+ (e && e.message ? e.message : e));
-    setStatus('Lookup failed.');
-  }finally{
-    if(btn){ btn.disabled = false; btn.textContent = 'Lookup'; }
-  }
-}
-
-// Re-bind for safety
-document.addEventListener('DOMContentLoaded', ()=>{
-  const b = document.getElementById('btnLookup');
-  if (b) b.addEventListener('click', (ev)=>{ ev.preventDefault(); try{ lookupVIN(); }catch(e){ console.error(e); } });
-});
-    const res = await fetch('/api/evidence/score', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ vin })
-    });
-    if(!res.ok){ throw new Error('Server error '+res.status); }
-    const dec = await res.json();
-    if(!dec.ok){ throw new Error(dec.error || 'VIN decode failed'); }
-
-    window.vehicle = dec.vehicle || {};
-    const t = `${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}${miles?(' • '+miles.toLocaleString()+' mi'):''}`.trim();
-    const banner = document.getElementById('vehicleBanner');
-    if (banner){ banner.innerHTML = `<em>Decoding VIN…</em>`; }
-    // After decode
-    if (banner){ banner.innerHTML = `<strong>${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}</strong>${vehicle.bodyClass?(' · '+vehicle.bodyClass):''}${miles?(' · '+miles.toLocaleString()+' mi'):''}`; }
-    const chip = document.getElementById('sVehicle'); if(chip) chip.textContent = t;
-
-    // Render risks from this call
-    if (typeof renderEvidence === 'function'){ renderEvidence(dec); }
-
-    // Fetch maintenance stub
-    try {
-      const m = await fetch(`/api/maintenance/${vin}`).then(r=>r.json());
-      document.getElementById('intervals') && (document.getElementById('intervals').innerHTML = Object.entries(m.intervals||{}).map(([k,v])=>`<li><strong>${k}</strong>: ${v}</li>`).join(''));
-    } catch(e){ console.warn('Maintenance fetch failed', e); }
-
-    // Advance steps
-    document.getElementById('step2') && (document.getElementById('step2').style.display='block');
-    document.getElementById('step3') && (document.getElementById('step3').style.display='block');
-    document.getElementById('step4') && (document.getElementById('step4').style.display='block');
-
-    // Recalc
-    if (typeof refreshOffer === 'function') refreshOffer();
-  }catch(e){
-    console.error('Lookup error:', e);
-    alert('Lookup failed: '+ (e && e.message ? e.message : e));
-  }finally{
-    if(btn){ btn.disabled = false; btn.textContent = 'Lookup'; }
-  }
-}
-
-// Also bind click by id to be extra safe
-document.addEventListener('DOMContentLoaded', ()=>{
-  const b = document.getElementById('btnLookup');
-  if (b) b.addEventListener('click', (ev)=>{ ev.preventDefault(); try{ lookupVIN(); }catch(e){ console.error(e); } });
-});
-
-function renderEvidence(res){
-  document.getElementById('riskCounts').textContent = `Recalls ${res.counts?.recalls||0} • Complaints ${res.counts?.complaints||0} • TSBs ${res.counts?.tsbs||0}`;
-  const defaults = {
-    'Engine / Oil consumption': ['Check oil use (qt/1k mi); blue smoke; fouled plugs','Scan for misfire codes; PCV/valve cover leaks'],
-    'Transmission': ['2–3 shift flare/judder test; harshness','CVT low-speed judder/whine; verify fluid service history'],
-    'Electrical': ['Battery/alternator load test; parasitic draw check'],
-    'Brakes': ['Measure pad/rotor thickness; brake pulsation test'],
-    'HVAC / A/C': ['Vent temp at idle/cruise; blend door operation']
-  };
-  const list = (res.topRisks||[]).map(r=>{
-    const checks = (r.checks?.length?r.checks:defaults[r.label]||[]).map(c=>`<li>${c}</li>`).join('');
-    return `<details class="risk"><summary><strong>${r.label}</strong> — score ${r.score}</summary>
-      <div class="muted">${r.rationale||''}</div>
-      <ul>${checks}</ul>
-    </details>`;
-  }).join('') || '<div class="muted">No notable risks.</div>';
-  document.getElementById('riskList').innerHTML = list;
-  document.getElementById('proofEvidence').textContent = JSON.stringify(res,null,2);
-}
-
-async function getEvidence(){
-  const vin = document.getElementById('vin').value.trim();
-  const res = await fetch('/api/evidence/score',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vin})}).then(r=>r.json());
-  if(res.ok) renderEvidence(res);
-}
-
-function applyMaint(){
-  // Example maintenance items
-  maintItems = [
-    { label:'Oil change', amount:60, why:'Low service history • No oil change found in Carfax text' },
-    { label:'Engine air filter', amount:45, why:'Low service history' },
-    { label:'Cabin filter', amount:40, why:'Low service history' },
-    { label:'Transmission service', amount:250, why:'>=60k mi and no service noted' }
-  ];
-  renderMaint();
-  refreshOffer();
-}
-function renderMaint(){
-  const tbody = document.getElementById('maintTable');
-  tbody.innerHTML = maintItems.map(i=>`<tr><td>${i.label}</td><td>${fmt(i.amount)}</td><td>${i.why||''}</td></tr>`).join('');
-}
-
-function addRecon(){
-  const label = document.getElementById('reconLabel').value.trim();
-  const amt = Number(document.getElementById('reconAmt').value||0);
-  if(!label || !amt){ return; }
-  reconItems.push({ label, amount:amt });
-  const tbody = document.getElementById('reconTable');
-  tbody.innerHTML = reconItems.map(i=>`<tr><td>${i.label}</td><td>${fmt(i.amount)}</td></tr>`).join('');
-  refreshOffer();
-}
-
-function renderCarfaxPretty(sum){
-  if(!sum || Object.keys(sum).length===0){
-    document.getElementById('proofCarfaxPretty').innerHTML='<span class="muted">No Carfax summary.</span>'; return;
-  }
-  const rows = [
-    ['Accidents', sum.accidents],
-    ['Damage Reports', sum.damageReports],
-    ['Owners', sum.owners],
-    ['Service Records', sum.serviceRecords],
-    ['Recalls', sum.recalls],
-    ['Last Odometer', sum.lastOdometer||'—'],
-    ['Usage', sum.usage||'—'],
-    ['Brandings', (Array.isArray(sum.brandings)&&sum.brandings.length)? sum.brandings.join(', ') : '—']
-  ];
-  document.getElementById('proofCarfaxPretty').innerHTML =
-    '<table style="width:100%">'+rows.map(r=>`<tr><td class="muted">${r[0]}</td><td><strong>${r[1]??'—'}</strong></td></tr>`).join('')+'</table>';
-}
-
-function refreshOffer(){
-  const retailBase = (window._retailBase||10000); // from comps or placeholder
-  const wholesaleBase = 9040; // placeholder value source
-  const maintDeduction = maintItems.reduce((s,i)=>s+(i.amount||0),0);
-  let reconTotal = reconItems.reduce((s,i)=>s+(i.amount||0),0);
-  // Risk reserve from current evidence counts (simple example: $80 per recall)
-  const risk = document.getElementById('riskCounts').textContent;
-  const recallMatch = /Recalls\s+(\d+)/.exec(risk);
-  const recallCount = recallMatch? Number(recallMatch[1]) : 0;
-  let riskReserve = recallCount * 80;
-  // v6.4.0: apply condition multipliers
-  const cond = (window._condition||'B');
-  const cf = {A:{recon:0.80,risk:0.80}, B:{recon:1.00,risk:1.00}, C:{recon:1.30,risk:1.20}}[cond] || {recon:1.00,risk:1.00};
-  reconTotal = Math.round(reconTotal * cf.recon);
-  riskReserve = Math.round(riskReserve * cf.risk);
-
-  /*v640*/ fetch('/api/offer/calc', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({ retailBase, wholesaleBase, maintDeduction, reconTotal, riskReserve })
-  }).then(r=>r.json()).then(calc=>{
-    if(!calc.ok) return;
-    calc = calc.numbers;
-    setText('oRetail', fmt(calc.retailBase));
-    setText('oWhole', fmt(calc.wholesaleBase));
-    setText('oMaint', '-'+fmt(maintDeduction));
-    setText('oAdj', fmt(calc.adjWholesale));
-    setText('oRecon', fmt(calc.reconTotal));
-    setText('oRisk', fmt(calc.riskReserve));
-    setText('oProfit', fmt(calc.desiredProfit||0));
-    setText('oHold', fmt((calc.holding||0)+(calc.fees||0)));
-    setText('oMax', fmt(calc.targetMaxBuy));
-
-    // summary badges
-    setText('sumRetail', fmt(calc.retailBase));
-    setText('sumWhole', fmt(calc.wholesaleBase));
-    setText('sumMaint', '-'+fmt(maintDeduction));
-    setText('sumRecon', fmt(reconTotal));
-    setText('sumRisk', fmt(calc.riskReserve));
-    setText('sumMax', fmt(calc.targetMaxBuy));
-  });
-}
-
-async function fetchEbay(kind){
-  const year = vehicle.year||''; const make = vehicle.make||''; const model = vehicle.model||'';
-  const zip = (document.getElementById('zip')||{value:''}).value.trim();
-  const radius = (document.getElementById('radius')||{value:'500'}).value;
-  const qs = new URLSearchParams({ year, make, model, zip, radius, type: kind }).toString();
-  const res = await fetch(`/api/ebay/comps?${qs}`).then(r=>r.json());
-  if(!res.ok){ (document.getElementById('ebayStats')||{}).textContent = res.error||'No results'; return; }
-  const s = res.stats||{};
-  const line = `${kind.toUpperCase()} — n=${s.count||0} • median ${fmt(Math.round(s.median||0))} • avg ${fmt(Math.round(s.avg||0))} • range ${fmt(s.min||0)}–${fmt(s.max||0)}`;
-  (document.getElementById('ebayStats')||{}).textContent = line;
-  const items = (res.items||[]).slice(0,20).map(x=>`<div style="border-bottom:1px dashed var(--accent); padding:4px 0"><a href="${x.url}" target="_blank">${x.title}</a> — <strong>${fmt(x.price)}</strong> <span class="muted">${x.loc||''}</span></div>`).join('') || '<div class="muted">No results.</div>';
-  if(kind==='sold'){ (document.getElementById('soldList')||{}).innerHTML = items; window._lastSoldMedian = Math.round(s.median||0); }
-  else { (document.getElementById('activeList')||{}).innerHTML = items; }
-}
-function useSoldMedian(){
-  if(!window._lastSoldMedian){ alert('Fetch SOLD comps first.'); return; }
-  window._retailBase = window._lastSoldMedian;
-  refreshOffer();
-}
-
-async function fetchSerp(site){
-  const zip = (document.getElementById('zip')||{value:''}).value.trim();
-  const year = vehicle.year||''; const make = vehicle.make||''; const model = vehicle.model||'';
-  const qs = new URLSearchParams({ site, year, make, model, zip }).toString();
-  const res = await fetch(`/api/serp/comps?${qs}`).then(r=>r.json());
-  if(!res.ok){ (site==='cars'?carsStats:fbStats).textContent = res.error||'No results'; return; }
-  const s = res.stats||{};
-  const line = `n=${s.count||0} • median ${fmt(Math.round(s.median||0))} • avg ${fmt(Math.round(s.avg||0))} • range ${fmt(s.min||0)}–${fmt(s.max||0)}`;
-  if(site==='cars'){
-    document.getElementById('carsStats').textContent = line;
-    document.getElementById('carsList').innerHTML = (res.items||[]).slice(0,20).map(x=>`<div style="border-bottom:1px dashed var(--accent); padding:4px 0"><a href="${x.url}" target="_blank">${x.title}</a> — <strong>${fmt(x.price)}</strong></div>`).join('') || '<div class="muted">No results.</div>';
-    window._carsMedian = Math.round(s.median||0);
-  }else{
-    document.getElementById('fbStats').textContent = line;
-    document.getElementById('fbList').innerHTML = (res.items||[]).slice(0,20).map(x=>`<div style="border-bottom:1px dashed var(--accent); padding:4px 0"><a href="${x.url}" target="_blank">${x.title}</a> — <strong>${fmt(x.price)}</strong></div>`).join('') || '<div class="muted">No results.</div>';
-    window._fbMedian = Math.round(s.median||0);
-  }
-}
-function parseCarsManual(){
-  const text = (document.getElementById('carsManual')||{value:''}).value;
-  fetch('/api/comps/manual',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})})
-    .then(r=>r.json()).then(res=>{
-      if(!res.ok){ document.getElementById('carsStats').textContent='Could not parse'; return; }
-      const s = res.stats||{};
-      document.getElementById('carsStats').textContent = `Manual — n=${s.count} • median ${fmt(Math.round(s.median||0))}`;
-      document.getElementById('carsList').innerHTML = (res.items||[]).map(x=>`<div style="border-bottom:1px dashed var(--accent); padding:4px 0">${x.title} — <strong>${fmt(x.price)}</strong> ${x.url?('<a href="'+x.url+'" target="_blank">link</a>'):''}</div>`).join('') || '<div class="muted">No results.</div>';
-      window._carsMedian = Math.round(s.median||0);
-    });
-}
-function parseFbManual(){
-  const text = (document.getElementById('fbManual')||{value:''}).value;
-  fetch('/api/comps/manual',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})})
-    .then(r=>r.json()).then(res=>{
-      if(!res.ok){ document.getElementById('fbStats').textContent='Could not parse'; return; }
-      const s = res.stats||{};
-      document.getElementById('fbStats').textContent = `Manual — n=${s.count} • median ${fmt(Math.round(s.median||0))}`;
-      document.getElementById('fbList').innerHTML = (res.items||[]).map(x=>`<div style="border-bottom:1px dashed var(--accent); padding:4px 0">${x.title} — <strong>${fmt(x.price)}</strong> ${x.url?('<a href="'+x.url+'" target="_blank">link</a>'):''}</div>`).join('') || '<div class="muted">No results.</div>';
-      window._fbMedian = Math.round(s.median||0);
-    });
-}
-function useCarsMedian(){ if(window._carsMedian){ window._retailBase = window._carsMedian; refreshOffer(); } else alert('Fetch or paste Cars.com comps first.'); }
-function useFbMedian(){ if(window._fbMedian){ window._retailBase = window._fbMedian; refreshOffer(); } else alert('Add FB comps first.'); }
-
-function useGuidesWeighted(){
-  const kbbR = Number((document.getElementById('kbbRetail')||{value:0}).value||0);
-  const bbR  = Number((document.getElementById('bbRetail')||{value:0}).value||0);
-  const manR = Number((document.getElementById('manRetail')||{value:0}).value||0);
-  const sold = Number(window._lastSoldMedian||0);
-  const cars = Number(window._carsMedian||0);
-  const vals = [];
-  if(sold) vals.push({w:.5, v:sold});
-  if(cars) vals.push({w:.2, v:cars});
-  if(kbbR) vals.push({w:.15, v:kbbR});
-  if(bbR)  vals.push({w:.1, v:bbR});
-  if(manR) vals.push({w:.05, v:manR});
-  if(!vals.length){ alert('Provide at least one source.'); return; }
-  const sumW = vals.reduce((s,x)=>s+x.w,0);
-  const blended = Math.round(vals.reduce((s,x)=>s+x.w*x.v,0)/sumW);
-  window._retailBase = blended;
-  refreshOffer();
-}
-
-async function readFileArrayBuffer(f){
-  return new Promise((resolve,reject)=>{
-    const r = new FileReader();
-    r.onload = ()=> resolve(r.result);
-    r.onerror = reject;
-    r.readAsArrayBuffer(f);
-  });
-}
-document.getElementById('carfaxFile')?.addEventListener('change', (e)=>{
-  const f = e.target.files?.[0];
-  window._cfFile = f || null;
-  document.getElementById('cfSelected').textContent = f ? `Selected: ${f.name}` : 'No file selected.';
-});
-
-async function extractCarfax(){
-  try{
-    const f = window._cfFile;
-    if(!f){ alert('Pick a PDF first.'); return; }
-    const buf = await readFileArrayBuffer(f);
-    const pdf = await pdfjsLib.getDocument({data: buf}).promise;
-    let text = '';
-    const maxPages = Math.min(pdf.numPages, 12);
-    for (let i=1;i<=maxPages;i++){
-      const page = await pdf.getPage(i);
-      const tc = await page.getTextContent();
-      const line = tc.items.map(it=>it.str).join(' ');
-      text += line + '\n';
-    }
-    document.getElementById('carfaxText').value = text.trim();
-    showStep(3); // advance
-  }catch(e){
-    console.warn('PDF extract failed', e);
-    alert('Could not extract text. Try OCR instead.');
-  }
-}
-
-async function ocrCarfax(){
-  try{
-    const f = window._cfFile;
-    if(!f){ alert('Pick a PDF or image first.'); return; }
-    // If image, OCR directly; if PDF, rasterize first page and OCR first 3 pages
-    let text = '';
-    if (f.type.startsWith('image/')){
-      const url = URL.createObjectURL(f);
-      const { data:{ text: out } } = await Tesseract.recognize(url, 'eng');
-      text = out;
-      URL.revokeObjectURL(url);
-    } else {
-      const buf = await readFileArrayBuffer(f);
-      const pdf = await pdfjsLib.getDocument({data: buf}).promise;
-      const maxPages = Math.min(pdf.numPages, 3);
-      for (let i=1;i<=maxPages;i++){
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 1.6 });
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = viewport.width; canvas.height = viewport.height;
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        const dataURL = canvas.toDataURL('image/png');
-        const { data:{ text: out } } = await Tesseract.recognize(dataURL, 'eng');
-        text += out + '\n';
-      }
-    }
-    document.getElementById('carfaxText').value = text.trim();
-    showStep(3);
-  }catch(e){
-    console.warn('OCR failed', e);
-    alert('OCR failed. You can paste Carfax text manually.');
-  }
-}
-
-async function submitCarfax(){
-  const text = document.getElementById('carfaxText').value.trim();
-  if(!text){ alert('Add Carfax text first (extract/ocr/paste).'); return; }
-  const res = await fetch('/api/carfax/upload',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text }) }).then(r=>r.json());
-  if(!res.ok){ alert('Carfax parse failed.'); return; }
-  window.carfaxSummary = res.summary||{};
-  document.getElementById('proofCarfax').textContent = JSON.stringify(window.carfaxSummary,null,2);
-  if (typeof renderCarfaxPretty === 'function') renderCarfaxPretty(window.carfaxSummary);
-  // Optionally refresh offer after Carfax influences maintenance
-  refreshOffer();
-  showStep(3);
-} 
-
-// Extend lookupVIN to reveal Step 2 after decode
-const _origLookup = lookupVIN;
-lookupVIN = async function(){
-  await _origLookup();
-  document.getElementById('step2').style.display='block';
-}
-
-function showStep(n){
-  const ids = ['step1','step2','step3','step4'];
-  ids.forEach(id=>{ const el=document.getElementById(id); if(!el) return; if(id==='step'+n) el.scrollIntoView({behavior:'smooth', block:'start'}); });
-}
-
-// --- PDF mode + print helpers ---
-function setPdfMode(mode){
-  document.body.classList.remove('mode-customer','mode-internal');
-  document.body.classList.add(mode==='internal' ? 'mode-internal' : 'mode-customer');
-  const sel = document.getElementById('pdfMode'); if(sel) sel.value = (mode==='internal'?'internal':'customer');
-}
-function printCustomer(){ setPdfMode('customer'); window.print(); }
-function printInternal(){ setPdfMode('internal'); window.print(); }
-setPdfMode('customer');
-
-// --- Condition grade ---
-window._condition = 'B'; // default
-const COND = {
-  A: { label:'Excellent', recon:0.80, risk:0.80 },
-  B: { label:'Average',   recon:1.00, risk:1.00 },
-  C: { label:'Rough',     recon:1.30, risk:1.20 }
-};
-function setCondition(g){
-  window._condition = (g==='A'||g==='B'||g==='C')? g : 'B';
-  ['condA','condB','condC'].forEach(id=>{ const el=document.getElementById(id); if(!el) return; el.classList.remove('primary'); });
-  const el = document.getElementById('cond'+window._condition); if(el) el.classList.add('primary');
-  refreshOffer();
-}
-
-// --- Weighted retail ---
-function applyWeightedRetail(){
-  const sources = [];
-  const wSold = Number(document.getElementById('wSold').value||0);
-  const wCars = Number(document.getElementById('wCars').value||0);
-  const wKbb  = Number(document.getElementById('wKbb').value||0);
-  const wBb   = Number(document.getElementById('wBb').value||0);
-  const wMan  = Number(document.getElementById('wMan').value||0);
-  const vSold = Number(window._lastSoldMedian||0);
-  const vCars = Number(window._carsMedian||0);
-  const vKbb  = Number((document.getElementById('kbbRetail')||{value:0}).value||0);
-  const vBb   = Number((document.getElementById('bbRetail')||{value:0}).value||0);
-  const vMan  = Number((document.getElementById('manRetail')||{value:0}).value||0);
-  if (vSold && wSold) sources.push({id:'Sold', w:wSold, v:vSold});
-  if (vCars && wCars) sources.push({id:'Cars', w:wCars, v:vCars});
-  if (vKbb  && wKbb ) sources.push({id:'KBB',  w:wKbb,  v:vKbb });
-  if (vBb   && wBb  ) sources.push({id:'BB',   w:wBb,   v:vBb  });
-  if (vMan  && wMan ) sources.push({id:'Manual',w:wMan, v:vMan});
-
-  if (!sources.length){ alert('Provide at least one source value.'); return; }
-  const sumW = sources.reduce((s,x)=>s+x.w,0) || 1;
-  const contribs = sources.map(s=>({id:s.id, pct: (s.w/sumW)*100, part: s.w/sumW*s.v}));
-  const blended = Math.round(contribs.reduce((s,x)=>s+x.part,0));
-
-  // Update UI
-  document.getElementById('weightedOut').textContent = fmt(blended);
-  const byId = Object.fromEntries(contribs.map(c=>[c.id,c]));
-  const setW = (id, pct)=>{ const el=document.getElementById(id); if(el) el.style.width = (pct||0)+'%'; };
-  setW('contribSold', byId.Sold?.pct||0);
-  setW('contribCars', byId.Cars?.pct||0);
-  setW('contribKbb',  byId.KBB?.pct||0);
-  setW('contribBb',   byId.BB?.pct||0);
-  setW('contribMan',  byId.Manual?.pct||0);
-  document.getElementById('weightedExplain').textContent = sources.map(s=>`${s.id} (${Math.round((s.w/sumW)*100)}%) × ${fmt(s.v)}`).join(' + ');
-
-  // Apply as current retail base
-  window._retailBase = blended;
-  refreshOffer();
-}
-
-
-window.addEventListener('error', (e)=>{ console.error('JS error', e.error||e.message); });
-// Diagnostics + robust bindings
-function setBadge(id, txt){ const el=document.getElementById(id); if(el) el.textContent = txt; }
-async function pingServer(){
-  try{ const r=await fetch('/api/health'); if(!r.ok) throw new Error(r.status); const j=await r.json(); setBadge('diagSrv','Server: OK'); }
-  catch(e){ setBadge('diagSrv','Server: DOWN'); }
-}
-function initApp(){
-  setBadge('diagJs','JS: Ready');
-  pingServer();
-  // Delegated click for Lookup
-  document.body.addEventListener('click', (ev)=>{
-    const act = ev.target.closest('[data-action="lookup"]');
-    if(act){ ev.preventDefault(); try{ lookupVIN(); }catch(e){ console.error(e); } }
-  });
-  // Enter on VIN triggers lookup
-  const vinI = document.getElementById('vin');
-  if (vinI){
-    vinI.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); lookupVIN(); } });
-  }
-}
-document.addEventListener('DOMContentLoaded', initApp);
-window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled rejection', e.reason); alert('Error: '+(e.reason&&e.reason.message?e.reason.message:e.reason)); });
-
-
-function setStatus(msg){ const el=document.getElementById('statusLine'); if(el) el.textContent = msg||''; }
-
-function openSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='flex'; loadSettingsIntoModal(); } }
-function closeSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='none'; } }
-async function loadSettingsIntoModal(){
-  try{
-    const r = await fetch('/api/settings'); const j = await r.json();
-    if(j.ok){
-      const s = j.settings||{};
-      document.getElementById('setProfit').value = s.desiredProfit ?? 2000;
-      document.getElementById('setDoc').value = s.docFee ?? 200;
-      document.getElementById('setHold').value = s.holdingPercent ?? 0.02;
-      document.getElementById('setRisk').value = s.riskReservePerRecall ?? 80;
-    }
-  }catch(e){ console.warn('load settings failed', e); }
-}
-async function saveSettings(){
-  const body = {
-    desiredProfit: Number(document.getElementById('setProfit').value||0),
-    docFee: Number(document.getElementById('setDoc').value||0),
-    holdingPercent: Number(document.getElementById('setHold').value||0),
-    riskReservePerRecall: Number(document.getElementById('setRisk').value||0),
-  };
-  try{
-    const r = await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    const j = await r.json();
-    if(j.ok){ closeSettings(); if (typeof refreshOffer==='function') refreshOffer(); }
-    else alert('Save failed: '+(j.error||'unknown'));
-  }catch(e){ alert('Save failed'); }
-}
-// Close modal on background click
-document.addEventListener('click', (ev)=>{
-  const m=document.getElementById('settingsModal');
-  if(m && ev.target===m){ closeSettings(); }
-});
-</script>
-
+<!-- Settings Modal -->
 <div id="settingsModal" class="no-print" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.35); z-index:1000">
-  <div class="card" style="width:520px; max-width:90vw; background:#fff">
+  <div class="card" style="width:520px; max-width:90vw; background:#fff; color:#111">
     <h3>Settings</h3>
-    <div class="muted">These apply to offer math immediately.</div>
+    <div class="muted" style="color:#333">Applies immediately to offer math.</div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px">
       <label>Desired Profit ($)<br><input id="setProfit" type="number" min="0"></label>
       <label>Doc Fee ($)<br><input id="setDoc" type="number" min="0"></label>
@@ -1548,5 +186,200 @@ document.addEventListener('click', (ev)=>{
     </div>
   </div>
 </div>
+
+<script>
+function fmt(n){ return '$'+(Number(n||0).toLocaleString()); }
+function setBadge(id, txt){ const el=document.getElementById(id); if(el) el.textContent = txt; }
+
+(async ()=>{ try{ const j=await fetch('/api/health').then(r=>r.json()); if(j&&j.ok) setBadge('diagSrv','Server: OK'); else setBadge('diagSrv','Server: DOWN'); }catch(e){ setBadge('diagSrv','Server: DOWN'); } })();
+
+function setPdfMode(mode){
+  document.body.classList.remove('mode-customer','mode-internal');
+  document.body.classList.add(mode==='internal' ? 'mode-internal' : 'mode-customer');
+  const sel = document.getElementById('pdfMode'); if(sel) sel.value = (mode==='internal'?'internal':'customer');
+}
+function printCustomer(){ setPdfMode('customer'); window.print(); }
+function printInternal(){ setPdfMode('internal'); window.print(); }
+setPdfMode('customer');
+
+function setStatus(msg){ const el=document.getElementById('statusLine'); if(el) el.textContent = msg||''; }
+
+window.lookupVIN = async function(){
+  const btn = document.getElementById('btnLookup');
+  const dbg = document.getElementById('lookupDebug');
+  try{
+    if(dbg){ dbg.textContent = 'Lookup clicked @ '+(new Date()).toLocaleTimeString(); }
+    if(btn){ btn.disabled = true; btn.textContent = 'Looking up…'; }
+    setStatus('Decoding VIN (VPIC)…');
+    const vin = (document.getElementById('vin')||{value:''}).value.trim();
+    const miles = Number((document.getElementById('miles')||{value:0}).value||0);
+    if(!vin){ alert('Enter a VIN'); setStatus('Enter a VIN'); return; }
+
+    let vehicle={};
+    try{
+      const r = await fetch('https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/'+encodeURIComponent(vin)+'?format=json');
+      const j = await r.json();
+      const row = j?.Results?.[0] || {};
+      vehicle = { year: row.ModelYear||null, make: row.Make||null, model: row.Model||null, bodyClass: row.BodyClass||null };
+      window.vehicle = vehicle;
+      const t = `${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}${miles?(' • '+miles.toLocaleString()+' mi'):''}`.trim();
+      const banner = document.getElementById('vehicleBanner');
+      const chip = document.getElementById('sVehicle');
+      if (chip) chip.textContent = t;
+      if (banner){ banner.innerHTML = `<strong>${vehicle.year||''} ${vehicle.make||''} ${vehicle.model||''}</strong>${vehicle.bodyClass?(' · '+vehicle.bodyClass):''}${miles?(' · '+miles.toLocaleString()+' mi'):''}`; }
+      setStatus('Vehicle identified. Fetching evidence…');
+    }catch(e){ setStatus('VPIC failed; trying server…'); }
+
+    ['step2','step3','step4'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='block'; });
+
+    (async ()=>{
+      try{
+        const dec = await fetch('/api/evidence/score',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vin})}).then(r=>r.json());
+        if(dec && dec.ok){
+          window.vehicle = dec.vehicle || window.vehicle || {};
+          if (typeof renderEvidence==='function') renderEvidence(dec);
+          setStatus('Evidence loaded.');
+          if(dbg) dbg.textContent += ' • evidence ok';
+        }else{ setStatus('Evidence failed.'); if(dbg) dbg.textContent += ' • evidence fail'; }
+      }catch(e){ setStatus('Evidence error.'); if(dbg) dbg.textContent += ' • evidence error'; }
+    })();
+
+    refreshOffer();
+  }catch(e){ alert('Lookup failed: '+(e?.message||e)); setStatus('Lookup failed.'); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent = 'Lookup'; } }
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  const b = document.getElementById('btnLookup');
+  if (b) b.addEventListener('click', (ev)=>{ ev.preventDefault(); window.lookupVIN(); });
+  const demo = document.getElementById('btnDemo');
+  if (demo) demo.addEventListener('click', (ev)=>{ ev.preventDefault(); document.getElementById('vin').value='1HGCR2F53FA129176'; document.getElementById('miles').value='203000'; window.lookupVIN(); });
+  const vinI = document.getElementById('vin');
+  if (vinI) vinI.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); window.lookupVIN(); } });
+});
+
+function renderEvidence(dec){
+  const c = dec.counts || {recalls:0, complaints:0, tsbs:0};
+  const risks = dec.topRisks||[];
+  document.getElementById('riskCounts').textContent = `Recalls: ${c.recalls||0} Complaints: ${c.complaints||0} TSBs: ${c.tsbs||0}`;
+  document.getElementById('riskList').innerHTML = risks.length? risks.map(r=>`<div>• <strong>${r.label}</strong> — ${r.rationale||''}</div>`).join('') : '<div class="muted">No specific risks highlighted.</div>';
+  document.getElementById('proofEvidence').textContent = JSON.stringify(dec,null,2);
+  document.getElementById('proofEvidence2').textContent = JSON.stringify(dec,null,2);
+  refreshOffer();
+}
+
+document.getElementById('carfaxFile')?.addEventListener('change', (e)=>{
+  const f = e.target.files?.[0]; window._cfFile = f || null;
+  document.getElementById('cfSelected').textContent = f ? `Selected: ${f.name}` : 'No file selected.';
+});
+async function extractCarfax(){
+  try{
+    const f = window._cfFile; if(!f){ alert('Pick a PDF first'); return; }
+    const buf = await f.arrayBuffer(); const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+    let text = ''; const maxPages = Math.min(pdf.numPages, 12);
+    for (let i=1;i<=maxPages;i++){ const page = await pdf.getPage(i); const tc = await page.getTextContent(); text += tc.items.map(it=>it.str).join(' ') + '\n'; }
+    document.getElementById('carfaxText').value = text.trim(); setStatus('Carfax text extracted.'); 
+  }catch(e){ alert('Extract failed; try OCR.'); }
+}
+async function ocrCarfax(){
+  try{
+    const f = window._cfFile; if(!f){ alert('Pick a PDF or image'); return; }
+    let text = '';
+    if (f.type.startsWith('image/')){
+      const url = URL.createObjectURL(f); const { data:{ text: out } } = await Tesseract.recognize(url, 'eng'); URL.revokeObjectURL(url); text = out;
+    } else {
+      const buf = await f.arrayBuffer(); const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+      const max = Math.min(pdf.numPages, 3);
+      for (let i=1;i<=max;i++){ const page = await pdf.getPage(i); const vp = page.getViewport({scale:1.6}); const cv = document.createElement('canvas'); const cx = cv.getContext('2d'); cv.width=vp.width; cv.height=vp.height; await page.render({canvasContext:cx, viewport:vp}).promise; const dataURL=cv.toDataURL('image/png'); const { data:{ text: out } } = await Tesseract.recognize(dataURL, 'eng'); text += out + '\n'; }
+    }
+    document.getElementById('carfaxText').value = text.trim(); setStatus('OCR complete.'); 
+  }catch(e){ alert('OCR failed'); }
+}
+async function submitCarfax(){
+  const text = document.getElementById('carfaxText').value.trim();
+  if(!text){ alert('Add Carfax text first.'); return; }
+  const res = await fetch('/api/carfax/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})}).then(r=>r.json());
+  if(!res.ok){ alert('Parse failed'); return; }
+  document.getElementById('proofCarfax').textContent = JSON.stringify(res.summary,null,2);
+  document.getElementById('proofCarfax2').textContent = JSON.stringify(res.summary,null,2);
+  setStatus('Carfax parsed.'); refreshOffer();
+}
+
+let maintItems = []; let reconItems = []; window._retailBase = 10000;
+function addMaint(){ const n=document.getElementById('maintName').value.trim(); const a=Number(document.getElementById('maintAmt').value||0); if(!n||!a) return; maintItems.push({name:n, amount:a}); renderMaint(); refreshOffer(); }
+function addRecon(n,a){ reconItems.push({name:n, amount:a}); renderRecon(); refreshOffer(); }
+function renderMaint(){ const el=document.getElementById('maintList'); if(!maintItems.length){ el.innerHTML='<div class="muted">No items yet.</div>'; return; } el.innerHTML = '<table style="width:100%">'+maintItems.map(i=>`<tr><td>${i.name}</td><td style="text-align:right">${fmt(i.amount)}</td></tr>`).join('')+'</table>'; }
+function renderRecon(){ const el=document.getElementById('reconList'); if(!reconItems.length){ el.innerHTML='<div class="muted">No items.</div>'; return; } el.innerHTML = '<table style="width:100%">'+reconItems.map(i=>`<tr><td>${i.name}</td><td style="text-align:right">${fmt(i.amount)}</td></tr>`).join('')+'</table>'; }
+
+async function refreshOffer(){
+  const retailBase = (window._retailBase||10000);
+  document.getElementById('numRetail').textContent = fmt(retailBase);
+  const wholesaleBase = Number((document.getElementById('numWholeBase')||{value:0}).value||0);
+  const maintDeduction = maintItems.reduce((s,i)=>s+(i.amount||0),0);
+  const reconTotal = reconItems.reduce((s,i)=>s+(i.amount||0),0);
+  const riskTxt = (document.getElementById('riskCounts')||{textContent:''}).textContent;
+  const rx = /Recalls\s+(\d+)/.exec(riskTxt); const recalls = rx? Number(rx[1]) : 0;
+  const riskReserve = recalls * 80;
+  document.getElementById('numMaint').textContent = fmt(maintDeduction);
+  document.getElementById('numRecon').textContent = fmt(reconTotal);
+  document.getElementById('numRisk').textContent = fmt(riskReserve);
+  const body = { retailBase, wholesaleBase, maintDeduction, reconTotal, riskReserve };
+  const out = await fetch('/api/offer/calc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());
+  const max = out?.numbers?.targetMaxBuy || 0;
+  document.getElementById('sumMax').textContent = fmt(max);
+}
+
+function applyWeightedRetail(){
+  const wSold=+document.getElementById('wSold').value||0, wCars=+document.getElementById('wCars').value||0, wKbb=+document.getElementById('wKbb').value||0, wBb=+document.getElementById('wBb').value||0, wMan=+document.getElementById('wMan').value||0;
+  const vSold=+window._lastSoldMedian||0, vCars=+window._carsMedian||0;
+  const vKbb=+((document.getElementById('kbbRetail')||{value:0}).value||0);
+  const vBb =+((document.getElementById('bbRetail')||{value:0}).value||0);
+  const vMan=0;
+  const sources=[]; function push(id,w,v){ if(w>0 && v>0) sources.push({id,w,v}); }
+  push('Sold',wSold,vSold); push('Cars',wCars,vCars); push('KBB',wKbb,vKbb); push('BB',wBb,vBb); push('Manual',wMan,vMan);
+  if(!sources.length){ alert('Provide at least one source value.'); return; }
+  const sumW = sources.reduce((s,x)=>s+x.w,0) || 1;
+  const blended = Math.round(sources.reduce((s,x)=> s + (x.w/sumW)*x.v, 0));
+  window._retailBase = blended; document.getElementById('weightedOut').textContent = fmt(blended);
+  const map = Object.fromEntries(sources.map(s=>[s.id,(s.w/sumW)*100]));
+  document.getElementById('contribSold').style.width = (map['Sold']||0)+'%';
+  document.getElementById('contribCars').style.width = (map['Cars']||0)+'%';
+  document.getElementById('contribKbb').style.width  = (map['KBB']||0)+'%';
+  document.getElementById('contribBb').style.width   = (map['BB']||0)+'%';
+  document.getElementById('contribMan').style.width  = (map['Manual']||0)+'%';
+  refreshOffer();
+}
+
+async function fetchEbay(kind){
+  const year = window.vehicle?.year||''; const make = window.vehicle?.make||''; const model = window.vehicle?.model||'';
+  const zip = (document.getElementById('zip')||{value:''}).value.trim();
+  const radius = (document.getElementById('radius')||{value:'500'}).value;
+  const qs = new URLSearchParams({ year, make, model, zip, radius, type: kind }).toString();
+  const res = await fetch('/api/ebay/comps?'+qs).then(r=>r.json());
+  if(!res.ok){ document.getElementById('ebayStats').textContent = res.error||'No results'; return; }
+  const s = res.stats||{};
+  document.getElementById('ebayStats').textContent = `${kind.toUpperCase()} — n=${s.count||0} • median ${fmt(Math.round(s.median||0))} • avg ${fmt(Math.round(s.avg||0))} • range ${fmt(s.min||0)}–${fmt(s.max||0)}`;
+  const items = (res.items||[]).slice(0,20).map(x=>`<div style="border-bottom:1px dashed var(--accent); padding:4px 0"><a href="${x.url}" target="_blank">${x.title}</a> — <strong>${fmt(x.price)}</strong> <span class="muted">${x.loc||''}</span></div>`).join('') || '<div class="muted">No results.</div>';
+  if(kind==='sold'){ document.getElementById('soldList').innerHTML = items; window._lastSoldMedian = Math.round(s.median||0); }
+  else { document.getElementById('activeList').innerHTML = items; }
+}
+function useSoldMedian(){ if(!window._lastSoldMedian){ alert('Fetch SOLD comps first.'); return; } window._retailBase = window._lastSoldMedian; refreshOffer(); }
+
+function openSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='flex'; loadSettingsIntoModal(); } }
+function closeSettings(){ const m=document.getElementById('settingsModal'); if(m){ m.style.display='none'; } }
+async function loadSettingsIntoModal(){
+  try{ const j = await fetch('/api/settings').then(r=>r.json()); if(j.ok){ const s=j.settings||{}; setVal('setProfit', s.desiredProfit??2000); setVal('setDoc', s.docFee??200); setVal('setHold', s.holdingPercent??0.02); setVal('setRisk', s.riskReservePerRecall??80); } }catch(e){}
+}
+function setVal(id,v){ const el=document.getElementById(id); if(el) el.value=v; }
+async function saveSettings(){
+  const body={ desiredProfit:+(document.getElementById('setProfit').value||0), docFee:+(document.getElementById('setDoc').value||0), holdingPercent:+(document.getElementById('setHold').value||0), riskReservePerRecall:+(document.getElementById('setRisk').value||0) };
+  const j = await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());
+  if(j.ok){ closeSettings(); refreshOffer(); } else alert('Save failed');
+}
+document.addEventListener('click', (ev)=>{ const m=document.getElementById('settingsModal'); if(m && ev.target===m) closeSettings(); });
+
+window.addEventListener('error', (e)=>{ console.error('JS error', e.error||e.message); });
+window.addEventListener('unhandledrejection', (e)=>{ console.error('Unhandled rejection', e.reason); alert('Error: '+(e.reason&&e.reason.message?e.reason.message:e.reason)); });
+</script>
 </body>
 </html>

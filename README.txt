@@ -1,15 +1,8 @@
-Used Car Project Pro v6.3.1 (CommonJS)
-Fixes:
-- Avoids ESM loader issues ('Unexpected token const/import') by using CommonJS server.js.
-- Uses Node's native fetch (Node >=18) — no node-fetch dependency.
-
-Includes:
-- eBay SOLD/ACTIVE comps (EBAY_APP_ID)
-- Cars.com & FB comps via SerpAPI (optional SERPAPI_KEY) + manual paste
-- KBB/Black Book manual entry + Weighted Retail
-- Auto NHTSA Top Risks per VIN, branding parser, $2k profit floor, sticky summary.
-
-Deploy:
-- Start: node server.js
-- Node: >=18 <23
-- Env: EBAY_APP_ID (required for eBay), SERPAPI_KEY (optional)
+Used Car Project Pro v6.4.9
+- CommonJS server, Node >=18.
+- VPIC-first lookup; background evidence; robust bindings and demo VIN.
+- Carfax upload with PDF.js + Tesseract OCR (client-side).
+- eBay comps (EBAY_APP_ID), SerpAPI comps optional (SERPAPI_KEY), manual comps.
+- Weighted retail; maintenance + recon; settings modal; offer calc.
+- /api/health and /public/test.html for diagnostics.
+Start: node server.js
